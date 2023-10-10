@@ -31,7 +31,12 @@ This produces a file that contains one route on each line, for each source IP, a
 ./plot.routes.distribution.py --routes_file routes.aws.us-west-1.us-east-1.by_geo
 ```
 
-- Now with the routes in `(lat,lon)-coordinate` format, we can combine this with carbon data to produce end-to-end Internet transit cost, or CIDT (carbon intensity of data transfer). We should also consider consolidating/aggregating the routes and account for time-varying carbon intensity.
+- Now with the routes in `(lat,lon)-coordinate` format, we can look up the carbon region or ISO (independent system operator) information with our carbon API.
 ```Shell
-# TODO: combine with carbon APIs.
+./carbon_region.py --convert-latlon-to-carbon-region --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_carbon_region
+```
+
+- Finally, we can export the distribution for easy lookup later (e.g. in a database).
+```Shell
+./carbon_client.py --export-routes-distribution --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_iso
 ```

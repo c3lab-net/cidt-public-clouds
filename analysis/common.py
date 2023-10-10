@@ -5,6 +5,8 @@ import json
 import sys
 import time
 
+CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
+
 def load_aws_ip_ranges(region):
     # Load the JSON data from the file
     with open('../data/cloud/ip-ranges.aws.json', 'r') as file:
