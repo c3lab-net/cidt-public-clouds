@@ -9,6 +9,7 @@ import heapq
 import time
 
 from typing import Any
+from multiprocessing import Pool
 
 from common import load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
@@ -27,7 +28,7 @@ class Graph:
 
     def dijkstra(self, start, destinations: set = set()):
         if start in destinations:
-            return [start]
+            return [start], start
 
         min_heap: list[tuple[float, Any]] = [(0, start)]
         distances = {node: float('inf') for node in self.graph}
@@ -49,7 +50,7 @@ class Graph:
                     prev[neighbor] = current_node
 
         if current_node not in prev:
-            return None
+            return [], start
 
         path = [current_node]
         while current_node != start:
@@ -57,7 +58,7 @@ class Graph:
             path.append(current_node)
         path.reverse()
 
-        return path
+        return path, start
 
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
     print('Building graph from ITDK nodes/links ...', file=sys.stderr)
@@ -205,15 +206,14 @@ def main():
     print(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...',
           file=sys.stderr)
     paths = []
-    for i in range(len(src_ips)):
-        src_ip = src_ips[i]
-        print(f'Running dijkstra on src IP {src_ip} ({i}/{len(src_ips)}) ...', file=sys.stderr)
-        path = graph.dijkstra(src_ip, set(dst_ips))
-        if path:
-            paths.append(path)
-            print(path, flush=True)
-        else:
-            print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
+    with Pool() as pool:
+        dst_ips = set(dst_ips)
+        for (path, src_ip) in pool.imap(lambda src_ip: graph.dijkstra(src_ip, dst_ips), src_ips):
+            if path:
+                paths.append(path)
+                print(path, flush=True)
+            else:
+                print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
     print(f'Dijkstra completed. Found {len(paths)} paths in total.', file=sys.stderr)
 
 if __name__ == '__main__':
