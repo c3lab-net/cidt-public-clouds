@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
-import sys
+import logging
 import pandas as pd
 
-from common import get_routes_from_file, load_itdk_node_ip_to_id_mapping
+from common import get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo'):
-    print(f'Loading node geo entries from {node_geo_filename} ...', file=sys.stderr)
+    logging.info(f'Loading node geo entries from {node_geo_filename} ...')
     columns = ['node_id', 'continent', 'country', 'region', 'city', 'lat', 'long', 'pop', 'IX', 'source']
     column_dtypes = {
         # 'node_id': None,  # type is already specified by the converter
@@ -27,7 +27,7 @@ def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.
     node_geo_df = pd.read_csv(node_geo_filename, sep='\t', comment='#', index_col='node_id',
                               names=columns, dtype=column_dtypes, usecols=usecols,
                               converters={'node_id': converter_node_id })
-    print(f'Loaded {len(node_geo_df)} entries from {node_geo_filename}.', file=sys.stderr)
+    logging.info(f'Loaded {len(node_geo_df)} entries from {node_geo_filename}.')
     return node_geo_df
 
 def get_node_ids_with_geo_coordinates():
@@ -35,7 +35,7 @@ def get_node_ids_with_geo_coordinates():
     return node_geo_df.index.tolist()
 
 def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
-    print('Converting routes from IPs to lat/lons ...', file=sys.stderr)
+    logging.info('Converting routes from IPs to lat/lons ...')
     converted_routes = []
 
     for ip_addresses in routes:
@@ -47,7 +47,7 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
         for node_id in node_ids:
             # _debug_
             if node_id not in node_geo_df.index:
-                print(f'Node ID {node_id} not found in node_geo_df', file=sys.stderr)
+                logging.error(f'Node ID {node_id} not found in node_geo_df')
                 coordinates = []
                 break
             row = node_geo_df.loc[node_id]
@@ -60,7 +60,7 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
         print(coordinates)
         converted_routes.append(coordinates)
 
-    print('Done', file=sys.stderr)
+    logging.info('Done')
     return converted_routes
 
 def parse_args():
@@ -76,6 +76,7 @@ def parse_args():
     return args
 
 def main():
+    init_logging()
     args = parse_args()
     if args.convert_ip_to_latlon:
         routes = get_routes_from_file(args.routes_file)

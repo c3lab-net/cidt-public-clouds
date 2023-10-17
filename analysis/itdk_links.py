@@ -3,11 +3,12 @@
 import argparse
 import ast
 import itertools
+import logging
 import re
 import sys
 import time
 
-from common import load_itdk_node_id_to_ips_mapping
+from common import init_logging, load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
 from graph_module import Graph
 
@@ -23,20 +24,20 @@ def unsigned_int_to_ip(unsigned_int: int) -> str:
     return socket.inet_ntoa(packed_ip)
 
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
-    print('Building graph from ITDK nodes/links ...', file=sys.stderr)
+    logging.info('Building graph from ITDK nodes/links ...')
 
-    print('Loading links from file to memory ...', file=sys.stderr)
+    logging.info('Loading links from file to memory ...')
     start_time = time.time()
     with open(link_file) as file:
         all_lines = file.readlines()
     elapsed_time = time.time() - start_time
-    print(f'Elapsed: {elapsed_time}s, read {len(all_lines)} lines.', file=sys.stderr)
+    logging.info(f'Elapsed: {elapsed_time}s, read {len(all_lines)} lines.')
 
     graph = Graph()
     edge_count = 0
     re_link = re.compile(r'^link L(?:\d+): +([N\d.: ]+)')
 
-    print('Building adjacency list graph in memory ...', file=sys.stderr)
+    logging.info('Building adjacency list graph in memory ...')
     start_time = time.time()
     for line in all_lines:
         if line.startswith('#'):
@@ -76,10 +77,10 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
         edge_count += 1
         if edge_count % 1000000 == 0:
             elapsed_time = time.time() - start_time
-            print(f'Elapsed: {elapsed_time}s, edge count: {edge_count}', file=sys.stderr)
+            logging.debug(f'Elapsed: {elapsed_time}s, edge count: {edge_count}')
             # break   # _debug_
     elapsed_time = time.time() - start_time
-    print(f'Elapsed: {elapsed_time}s, total edge count: {edge_count}', file=sys.stderr)
+    logging.info(f'Elapsed: {elapsed_time:.2f}s, total edge count: {edge_count}')
     return graph
 
 def get_cloud_region_matched_ips(cloud, region) -> list[str]:
@@ -106,13 +107,13 @@ def get_cloud_region_matched_ips(cloud, region) -> list[str]:
     ips = []
     for node_id in d_node_to_matches:
         for ip_prefix, ip in d_node_to_matches[node_id]:
-            # print(node_id, ip_prefix, ip, file=sys.stderr)    # _debug_
+            # logging.debug(node_id, ip_prefix, ip)
             ips.append(ip)
-    print(f'Found {len(ips)} IPs for {cloud}:{region}.', file=sys.stderr)
+    logging.info(f'Found {len(ips)} IPs for {cloud}:{region}.')
     return ips
 
 def remove_node_without_geo_coordinates(itdk_node_id_to_ips: dict):
-    print('Removing nodes without geocoordinates ...', file=sys.stderr)
+    logging.info('Removing nodes without geocoordinates ...')
     nodes_with_geo_coordinates = set(get_node_ids_with_geo_coordinates())
     removed_count = 0
 
@@ -126,8 +127,8 @@ def remove_node_without_geo_coordinates(itdk_node_id_to_ips: dict):
         processed_count += 1
         if processed_count % 1000000 == 0:
             elapsed_time = time.time() - start_time
-            print(f'Elapsed: {elapsed_time}s, node count: {processed_count}', file=sys.stderr)
-    print(f'Removing {removed_count} nodes without geocoordinates.', file=sys.stderr)
+            logging.debug(f'Elapsed: {elapsed_time:.2f}s, node count: {processed_count}')
+    logging.info(f'Removed {removed_count} nodes without geocoordinates.')
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -152,6 +153,7 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    init_logging()
     args = parse_args()
     if args.src_cloud:
         src_ips = get_cloud_region_matched_ips(args.src_cloud, args.src_region)
@@ -166,29 +168,29 @@ def main():
     else:
         dst_ips = []
 
-    
     # Build graph from ITDK nodes/links
     itdk_node_id_to_ips = load_itdk_node_id_to_ips_mapping()
     remove_node_without_geo_coordinates(itdk_node_id_to_ips)
     graph = load_itdk_graph_from_links(itdk_node_id_to_ips)
-    dst_ips = [ip_to_unsigned_int(item) for item in dst_ips]
+
+    # Load the set of source and destination IPs
     if not src_ips:
         src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
     src_ips = [ip_to_unsigned_int(item) for item in src_ips]
-    
+    dst_ips = [ip_to_unsigned_int(item) for item in dst_ips]
+
+    # Run Dijkstra in parallel
+    logging.info(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...')
     start_time = time.time()
-    print(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...',
-          file=sys.stderr)
     paths = graph.parallelDijkstra(src_ips, set(dst_ips))
     elapsed_time = time.time() - start_time
-    
-    print(f'Elapsed: {elapsed_time}s', file=sys.stderr)
-    paths = [[unsigned_int_to_ip(item) for item in path] for path in paths if path]
-    
-    for path in paths:
-        print(path, flush=True)
+    logging.info(f'Elapsed: {elapsed_time}s')
 
-    print(f'Dijkstra completed. Found {len(paths)} paths in total.', file=sys.stderr)
+    paths = [[unsigned_int_to_ip(item) for item in path] for path in paths if path]
+    for path in paths:
+        print(path)
+
+    logging.info(f'Dijkstra completed. Found {len(paths)} paths in total.')
 
 if __name__ == '__main__':
     main()

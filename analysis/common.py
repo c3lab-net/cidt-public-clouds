@@ -4,8 +4,15 @@ import ast
 import json
 import sys
 import time
+import logging
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
+
+def init_logging():
+    logging.basicConfig(level=logging.DEBUG,
+                        stream=sys.stderr,
+                        format='%(asctime)s %(levelname)-8s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
 
 def load_aws_ip_ranges(region):
     # Load the JSON data from the file
@@ -42,7 +49,7 @@ def load_cloud_ip_ranges(cloud, region):
     raise ValueError(f'Unsupported cloud {cloud}')
 
 def load_itdk_mapping_internal(node_file, reverse=False) -> dict:
-    print('Loading ITDK nodes ...', file=sys.stderr)
+    logging.info('Loading ITDK nodes ...')
     start_time = time.time()
     mapping_id_to_ips = {}
     mapping_ip_to_id = {}
@@ -53,7 +60,7 @@ def load_itdk_mapping_internal(node_file, reverse=False) -> dict:
                 continue
 
             if not line.startswith('node N'):
-                print('Cannot process line:', line, file=sys.stderr)
+                logging.error('Cannot process line:', line)
                 continue
 
             arr = line.split(':', 1)
@@ -68,10 +75,10 @@ def load_itdk_mapping_internal(node_file, reverse=False) -> dict:
             node_count += 1
             if node_count % 1000000 == 0:
                 elapsed_time = time.time() - start_time
-                print(f'Elapsed: {elapsed_time}s, node count: {node_count}', file=sys.stderr)
+                logging.debug(f'Elapsed: {elapsed_time:.2f}s, node count: {node_count}')
                 # break   # _debug_
     elapsed_time = time.time() - start_time
-    print(f'Elapsed: {elapsed_time}s, total node count: {node_count}', file=sys.stderr)
+    logging.info(f'Elapsed: {elapsed_time:.2f}s, total node count: {node_count}')
     if reverse:
         return mapping_ip_to_id
     else:
