@@ -2,11 +2,11 @@
 
 import argparse
 from collections import Counter
-import sys
+import logging
 
 import requests
 
-from common import get_routes_from_file, CARBON_API_URL
+from common import get_routes_from_file, CARBON_API_URL, init_logging
 
 def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
     (latitude, longitude) = coordinate
@@ -19,7 +19,7 @@ def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
         response_json = response.json()
         return response_json['iso']
     except Exception as ex:
-        print(ex, file=sys.stderr)
+        logging.error(ex)
         return 'Unknown'
 
 def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]]):
@@ -43,7 +43,7 @@ def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]]):
     return routes_in_carbon_region
 
 def export_routes_distribution(routes: list[list]):
-    print('Exporting routes distribution ...', file=sys.stderr)
+    logging.info('Exporting routes distribution ...')
 
     routes_as_str = [ '|'.join(route) for route in routes ]
     for route_str, count in sorted(Counter(routes_as_str).items(), key=lambda x: x[1], reverse=True):
@@ -64,6 +64,7 @@ def parse_args():
     return args
 
 def main():
+    init_logging()
     args = parse_args()
     if args.convert_latlon_to_carbon_region:
         routes = get_routes_from_file(args.routes_file)

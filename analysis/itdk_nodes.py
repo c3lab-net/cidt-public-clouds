@@ -2,32 +2,32 @@
 
 
 import ast
-import sys
+import logging
 import time
 import argparse
 # from ipaddress import IPv4Address, IPv4Network
 from cidr_trie import PatriciaTrie
 
-from common import load_cloud_ip_ranges, load_itdk_node_id_to_ips_mapping
+from common import init_logging, load_cloud_ip_ranges, load_itdk_node_id_to_ips_mapping
 
 def build_trie_from_ip_ranges(ip_ranges: list[tuple]) -> PatriciaTrie:
     trie = PatriciaTrie()
     for ip_range in ip_ranges:
         trie.insert(ip_range[0], (ip_range[1:]))
-    print(f'Built trie with {trie.size}', file=sys.stderr)
+    logging.info(f'Built trie with {trie.size}')
     return trie
 
 def get_matching_ips(ips: list[str], cidr_trie: PatriciaTrie) -> list[tuple]:
     matching_ips = []
     for ip in ips:
         if ip.count('.') != 3:
-            print(f'Invalid IP: {ip}', file=sys.stderr)
+            logging.error(f'Invalid IP: {ip}')
             continue
         matching_ips += [(ip,) + t for t in cidr_trie.find_all(ip)]
     return matching_ips
 
 def get_matching_node_ips(cidr_trie: PatriciaTrie, itdk_node_id_to_ips: dict[str, list]):
-    print('Starting to match nodes in ITDK nodes ...', file=sys.stderr)
+    logging.info('Starting to match nodes in ITDK nodes ...')
     matched_node_ips = {}
     node_count = 0
     ip_count = 0
@@ -41,15 +41,15 @@ def get_matching_node_ips(cidr_trie: PatriciaTrie, itdk_node_id_to_ips: dict[str
         ip_count += len(ips)
         if node_count % 1000000 == 0:
             elapsed_time = time.time() - start_time
-            print(f'Elapsed: {elapsed_time}s, node processed: {node_count}, ip count: {ip_count}', file=sys.stderr)
+            logging.debug(f'Elapsed: {elapsed_time:.2f}s, node processed: {node_count}, ip count: {ip_count}')
             matched_ip_count = sum([len(v) for _, v in matched_node_ips.items()])
-            print(f'Matched IPs: {matched_ip_count}', file=sys.stderr)
+            logging.debug(f'Matched IPs: {matched_ip_count}')
 
     return matched_node_ips
 
 def convert_matched_nodes_to_by_region(matched_nodes_file, ip_ranges):
     # by region, node, prefix then ip.
-    print('Converting matched nodes format ...', file=sys.stderr)
+    logging.info('Converting matched nodes format ...')
     with open(matched_nodes_file) as file:
         dict_str = file.read()
         d_by_node = ast.literal_eval(dict_str)
@@ -84,13 +84,14 @@ def parse_args():
     return args
 
 def main():
+    init_logging()
     args = parse_args()
     ip_ranges = load_cloud_ip_ranges(args.cloud, args.region)
 
-    print(f'Cloud: {args.cloud}, region: {args.region}', file=sys.stderr)
-    print('IP ranges:', file=sys.stderr)
+    logging.info(f'Cloud: {args.cloud}, region: {args.region}')
+    logging.info('IP ranges:')
     for ip_range in ip_ranges:
-        print(ip_range, file=sys.stderr)
+        logging.info(ip_range)
 
     if args.convert_to_by_region:
         matched_nodes_to_by_region = convert_matched_nodes_to_by_region(args.matched_nodes_file, ip_ranges)

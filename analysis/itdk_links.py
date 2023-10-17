@@ -3,8 +3,8 @@
 import argparse
 import ast
 import itertools
+import logging
 import re
-import sys
 import heapq
 import time
 
@@ -12,7 +12,7 @@ from typing import Any
 import multiprocessing
 from functools import partial
 
-from common import load_itdk_node_id_to_ips_mapping
+from common import init_logging, load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
 
 class Graph:
@@ -32,7 +32,7 @@ class Graph:
             return [start], start
 
         rank = multiprocessing.current_process()._identity[0]
-        print(f'Processor {rank} running dijkstra on {start}.', file=sys.stderr)
+        logging.debug(f'Processor {rank} running dijkstra on {start}.')
 
         min_heap: list[tuple[float, Any]] = [(0, start)]
         distances = {node: float('inf') for node in self.graph}
@@ -65,7 +65,7 @@ class Graph:
         return path, start
 
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
-    print('Building graph from ITDK nodes/links ...', file=sys.stderr)
+    logging.info('Building graph from ITDK nodes/links ...')
     graph = Graph()
     edge_count = 0
     start_time = time.time()
@@ -77,7 +77,7 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
 
             m = re_link.match(line)
             if not m:
-                print('Cannot process line:', line, file=sys.stderr)
+                logging.error('Cannot process line:', line)
                 continue
             routers = m.group(1)
             known_interfaces = set()
@@ -97,22 +97,22 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
                 # else:
                 #     router_ips = itdk_node_id_to_ips.get(router, [])
                 #     # if len(router_ips) == 0:
-                #     #     print(f'WARNING: node {router} not found!', file=sys.stderr)
+                #     #     logging.warning(f'Node {router} not found!')
                 for router_ip in router_ips:
                     known_interfaces.add(router_ip)
             if len(known_interfaces) <= 1:
                 continue
-            # print(f'Found interfaces: {known_interfaces}', file=sys.stderr)
+            # logging.info(f'Found interfaces: {known_interfaces}')
             for (n1, n2) in itertools.combinations(known_interfaces, 2):
                 graph.add_edge(n1, n2)
 
             edge_count += 1
             if edge_count % 1000000 == 0:
                 elapsed_time = time.time() - start_time
-                print(f'Elapsed: {elapsed_time}s, edge count: {edge_count}', file=sys.stderr)
+                logging.debug(f'Elapsed: {elapsed_time:.2f}s, edge count: {edge_count}')
                 # break   # _debug_
     elapsed_time = time.time() - start_time
-    print(f'Elapsed: {elapsed_time}s, total edge count: {edge_count}', file=sys.stderr)
+    logging.info(f'Elapsed: {elapsed_time:.2f}s, total edge count: {edge_count}')
     return graph
 
 def get_cloud_region_matched_ips(cloud, region) -> list[str]:
@@ -139,13 +139,13 @@ def get_cloud_region_matched_ips(cloud, region) -> list[str]:
     ips = []
     for node_id in d_node_to_matches:
         for ip_prefix, ip in d_node_to_matches[node_id]:
-            # print(node_id, ip_prefix, ip, file=sys.stderr)    # _debug_
+            # logging.debug(node_id, ip_prefix, ip)
             ips.append(ip)
-    print(f'Found {len(ips)} IPs for {cloud}:{region}.', file=sys.stderr)
+    logging.info(f'Found {len(ips)} IPs for {cloud}:{region}.')
     return ips
 
 def remove_node_without_geo_coordinates(itdk_node_id_to_ips: dict):
-    print('Removing nodes without geocoordinates ...', file=sys.stderr)
+    logging.info('Removing nodes without geocoordinates ...')
     nodes_with_geo_coordinates = set(get_node_ids_with_geo_coordinates())
     removed_count = 0
 
@@ -159,8 +159,8 @@ def remove_node_without_geo_coordinates(itdk_node_id_to_ips: dict):
         processed_count += 1
         if processed_count % 1000000 == 0:
             elapsed_time = time.time() - start_time
-            print(f'Elapsed: {elapsed_time}s, node count: {processed_count}', file=sys.stderr)
-    print(f'Removing {removed_count} nodes without geocoordinates.', file=sys.stderr)
+            logging.debug(f'Elapsed: {elapsed_time:.2f}s, node count: {processed_count}')
+    logging.info(f'Removed {removed_count} nodes without geocoordinates.')
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -185,6 +185,7 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    init_logging()
     args = parse_args()
     if args.src_cloud:
         src_ips = get_cloud_region_matched_ips(args.src_cloud, args.src_region)
@@ -208,9 +209,8 @@ def main():
         src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
 
     cpu_count = multiprocessing.cpu_count()
-    print(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...',
-          file=sys.stderr)
-    print(f'Running Dijkstras with {cpu_count} threads on {len(src_ips)} inputs.', file=sys.stderr)
+    logging.info(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...')
+    logging.info(f'Running Dijkstras with {cpu_count} threads on {len(src_ips)} inputs.')
 
     paths = []
     with multiprocessing.Pool(cpu_count) as pool:
@@ -220,8 +220,8 @@ def main():
                 paths.append(path)
                 print(path, flush=True)
             else:
-                print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
-    print(f'Dijkstra completed. Found {len(paths)} paths in total.', file=sys.stderr)
+                logging.error(f'Cannot find path for src ip {src_ip}')
+    logging.info(f'Dijkstra completed. Found {len(paths)} paths in total.')
 
 if __name__ == '__main__':
     main()
