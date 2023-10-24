@@ -12,52 +12,7 @@ from typing import Any
 
 from common import load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
-
-class Graph:
-    def __init__(self):
-        self.graph = {}
-
-    def add_edge(self, u, v):
-        if u not in self.graph:
-            self.graph[u] = []
-        self.graph[u].append(v)
-        if v not in self.graph:
-            self.graph[v] = []
-        self.graph[v].append(u)
-
-    def dijkstra(self, start, destinations: set = set()):
-        if start in destinations:
-            return [start]
-
-        min_heap: list[tuple[float, Any]] = [(0, start)]
-        distances = {node: float('inf') for node in self.graph}
-        distances[start] = 0
-        prev = {}
-        current_node = None
-
-        while min_heap:
-            _, current_node = heapq.heappop(min_heap)
-            if current_node in destinations:
-                break
-
-            for neighbor in self.graph.get(current_node, []):
-                distance = distances[current_node] + 1
-
-                if distance < distances[neighbor]:
-                    distances[neighbor] = distance
-                    heapq.heappush(min_heap, (distance, neighbor))
-                    prev[neighbor] = current_node
-
-        if current_node not in prev:
-            return None
-
-        path = [current_node]
-        while current_node != start:
-            current_node = prev[current_node]
-            path.append(current_node)
-        path.reverse()
-
-        return path
+from graph_module import Graph
 
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
     print('Building graph from ITDK nodes/links ...', file=sys.stderr)
