@@ -54,7 +54,7 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
                 continue
             # print(f'Found interfaces: {known_interfaces}', file=sys.stderr)
             for (n1, n2) in itertools.combinations(known_interfaces, 2):
-                graph.add_edge(n1, n2)
+                graph.add_edge(graph.ipv4ToUInt(n1), graph.ipv4ToUInt(n2))
 
             edge_count += 1
             if edge_count % 1000000 == 0:
@@ -149,11 +149,12 @@ def main():
     else:
         dst_ips = []
 
+    
     # Build graph from ITDK nodes/links
     itdk_node_id_to_ips = load_itdk_node_id_to_ips_mapping()
     remove_node_without_geo_coordinates(itdk_node_id_to_ips)
     graph = load_itdk_graph_from_links(itdk_node_id_to_ips)
-
+    dst_ips = [graph.ipv4ToUInt(item) for item in dst_ips]
     if not src_ips:
         src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
 
@@ -163,7 +164,8 @@ def main():
     for i in range(len(src_ips)):
         src_ip = src_ips[i]
         print(f'Running dijkstra on src IP {src_ip} ({i}/{len(src_ips)}) ...', file=sys.stderr)
-        path = graph.dijkstra(src_ip, set(dst_ips))
+        path = graph.dijkstra(graph.ipv4ToUInt(src_ip), set(dst_ips))
+        path = [graph.uintToIPv4(item) for item in path]
         if path:
             paths.append(path)
             print(path, flush=True)
