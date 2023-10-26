@@ -21,6 +21,10 @@ def ip_to_unsigned_int(ip: str) -> int:
     packed_ip = socket.inet_aton(ip)
     return struct.unpack("!I", packed_ip)[0]
 
+def unsigned_int_to_ip(unsigned_int: int) -> str:
+    packed_ip = struct.pack("!I", unsigned_int)
+    return socket.inet_ntoa(packed_ip)
+
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
     print('Building graph from ITDK nodes/links ...', file=sys.stderr)
     graph = Graph()
@@ -173,7 +177,7 @@ def main():
     elapsed_time = time.time() - start_time
     
     print(f'Elapsed: {elapsed_time}s', file=sys.stderr)
-    paths = [[graph.uintToIPv4(item) for item in path] for path in paths if path]
+    paths = [[unsigned_int_to_ip(item) for item in path] for path in paths if path]
     
     for path in paths:
         print(path, flush=True)

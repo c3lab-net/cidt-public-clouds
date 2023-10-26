@@ -8,6 +8,7 @@
 #include <tuple>
 #include <sstream>
 #include <omp.h>
+#include <stdint.h>
 
 namespace py = pybind11;
 
@@ -39,10 +40,10 @@ public:
             return {start};
         }
 
-        std::priority_queue<std::tuple<float, unsigned int>, std::vector<std::tuple<float, unsigned int>>, std::greater<std::tuple<float, unsigned int>>> min_heap;
-        std::unordered_map<unsigned int, float> distances;
+        std::priority_queue<std::tuple<int_fast8_t, unsigned int>, std::vector<std::tuple<int_fast8_t, unsigned int>>, std::greater<std::tuple<int_fast8_t, unsigned int>>> min_heap;
+        std::unordered_map<unsigned int, int_fast8_t> distances;
         for (const auto &pair : graph) {
-            distances[pair.first] = std::numeric_limits<float>::infinity();
+            distances[pair.first] = INT_FAST8_MAX;
         }
         distances[start] = 0;
         std::unordered_map<unsigned int, unsigned int> prev;
@@ -59,7 +60,7 @@ public:
             }
 
             for (const auto &neighbor : graph[current_node]) {
-                float distance = distances[current_node] + 1;
+                int_fast8_t distance = distances[current_node] + 1;
                 if (distance < distances[neighbor]) {
                     distances[neighbor] = distance;
                     min_heap.push(std::make_tuple(distance, neighbor));
@@ -81,47 +82,11 @@ public:
         std::reverse(path.begin(), path.end());
         return path;
     }
-
-    unsigned int ipv4ToUInt(const std::string &ip) {
-        std::vector<int> segments;
-        std::stringstream ss(ip);
-        std::string segment;
-        
-        while (std::getline(ss, segment, '.')) {
-            segments.push_back(std::stoi(segment));
-        }
-
-        if (segments.size() != 4) {
-            // Invalid IPv4 address
-            return 0;
-        }
-
-        unsigned int result = 0;
-        for (int i = 0; i < 4; ++i) {
-            result = (result << 8) | (segments[i] & 0xFF);
-        }
-
-        return result;
-    }
-    std::string uintToIPv4(unsigned int ipInt) {
-        std::string ip = "";
-        for (int i = 0; i < 4; ++i) {
-            if (i != 0) {
-                ip = "." + ip;
-            }
-            ip = std::to_string(ipInt & 0xFF) + ip;
-            ipInt >>= 8;
-        }
-        return ip;
-    }
 };
 
 PYBIND11_MODULE(graph_module, m) {
     py::class_<Graph>(m, "Graph")
         .def(py::init<>())
         .def("add_edge", &Graph::add_edge)
-        .def("dijkstra", &Graph::dijkstra)
-        .def("ipv4ToUInt", &Graph::ipv4ToUInt)
-        .def("uintToIPv4", &Graph::uintToIPv4)
         .def("parallelDijkstra", &Graph::parallelDijkstra);
 }
