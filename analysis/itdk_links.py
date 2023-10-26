@@ -14,6 +14,13 @@ from common import load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
 from graph_module import Graph
 
+import socket
+import struct
+
+def ip_to_unsigned_int(ip: str) -> int:
+    packed_ip = socket.inet_aton(ip)
+    return struct.unpack("!I", packed_ip)[0]
+
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
     print('Building graph from ITDK nodes/links ...', file=sys.stderr)
     graph = Graph()
@@ -54,7 +61,7 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
                 continue
             # print(f'Found interfaces: {known_interfaces}', file=sys.stderr)
             for (n1, n2) in itertools.combinations(known_interfaces, 2):
-                graph.add_edge(graph.ipv4ToUInt(n1), graph.ipv4ToUInt(n2))
+                graph.add_edge(ip_to_unsigned_int(n1), ip_to_unsigned_int(n2))
 
             edge_count += 1
             if edge_count % 1000000 == 0:
@@ -154,29 +161,23 @@ def main():
     itdk_node_id_to_ips = load_itdk_node_id_to_ips_mapping()
     remove_node_without_geo_coordinates(itdk_node_id_to_ips)
     graph = load_itdk_graph_from_links(itdk_node_id_to_ips)
-    dst_ips = [graph.ipv4ToUInt(item) for item in dst_ips]
+    dst_ips = [ip_to_unsigned_int(item) for item in dst_ips]
     if not src_ips:
         src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
-
-    src_ips = [graph.ipv4ToUInt(item) for item in src_ips]
+    src_ips = [ip_to_unsigned_int(item) for item in src_ips]
+    
     start_time = time.time()
     print(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...',
           file=sys.stderr)
     paths = graph.parallelDijkstra(src_ips, set(dst_ips))
     elapsed_time = time.time() - start_time
+    
     print(f'Elapsed: {elapsed_time}s', file=sys.stderr)
-    # paths = []
-    # for i in range(len(src_ips)):
-    #     src_ip = src_ips[i]
-    #     print(f'Running dijkstra on src IP {src_ip} ({i}/{len(src_ips)}) ...', file=sys.stderr)
-    #     path = graph.dijkstra(graph.ipv4ToUInt(src_ip), set(dst_ips))
-    #     path = [graph.uintToIPv4(item) for item in path]
-    #     if path:
-    #         paths.append(path)
+    paths = [[graph.uintToIPv4(item) for item in path] for path in paths if path]
+    
     for path in paths:
         print(path, flush=True)
-    #     else:
-    #         print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
+
     print(f'Dijkstra completed. Found {len(paths)} paths in total.', file=sys.stderr)
 
 if __name__ == '__main__':

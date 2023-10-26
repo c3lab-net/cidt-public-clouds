@@ -104,16 +104,16 @@ public:
         return result;
     }
     std::string uintToIPv4(unsigned int ipInt) {
-    std::string ip = "";
-    for (int i = 0; i < 4; ++i) {
-        if (i != 0) {
-            ip = "." + ip;
+        std::string ip = "";
+        for (int i = 0; i < 4; ++i) {
+            if (i != 0) {
+                ip = "." + ip;
+            }
+            ip = std::to_string(ipInt & 0xFF) + ip;
+            ipInt >>= 8;
         }
-        ip = std::to_string(ipInt & 0xFF) + ip;
-        ipInt >>= 8;
+        return ip;
     }
-    return ip;
-}
 };
 
 PYBIND11_MODULE(graph_module, m) {
