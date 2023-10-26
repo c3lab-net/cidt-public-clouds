@@ -158,19 +158,25 @@ def main():
     if not src_ips:
         src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
 
+    src_ips = [graph.ipv4ToUInt(item) for item in src_ips]
+    start_time = time.time()
     print(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...',
           file=sys.stderr)
-    paths = []
-    for i in range(len(src_ips)):
-        src_ip = src_ips[i]
-        print(f'Running dijkstra on src IP {src_ip} ({i}/{len(src_ips)}) ...', file=sys.stderr)
-        path = graph.dijkstra(graph.ipv4ToUInt(src_ip), set(dst_ips))
-        path = [graph.uintToIPv4(item) for item in path]
-        if path:
-            paths.append(path)
-            print(path, flush=True)
-        else:
-            print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
+    paths = graph.parallelDijkstra(src_ips, set(dst_ips))
+    elapsed_time = time.time() - start_time
+    print(f'Elapsed: {elapsed_time}s', file=sys.stderr)
+    # paths = []
+    # for i in range(len(src_ips)):
+    #     src_ip = src_ips[i]
+    #     print(f'Running dijkstra on src IP {src_ip} ({i}/{len(src_ips)}) ...', file=sys.stderr)
+    #     path = graph.dijkstra(graph.ipv4ToUInt(src_ip), set(dst_ips))
+    #     path = [graph.uintToIPv4(item) for item in path]
+    #     if path:
+    #         paths.append(path)
+    for path in paths:
+        print(path, flush=True)
+    #     else:
+    #         print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
     print(f'Dijkstra completed. Found {len(paths)} paths in total.', file=sys.stderr)
 
 if __name__ == '__main__':

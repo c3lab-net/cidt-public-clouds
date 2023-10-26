@@ -7,6 +7,7 @@
 #include <string>
 #include <tuple>
 #include <sstream>
+#include <omp.h>
 
 namespace py = pybind11;
 
@@ -14,6 +15,20 @@ class Graph {
 public:
     std::unordered_map<unsigned int, std::unordered_set<unsigned int>> graph;
 
+    std::vector<std::vector<unsigned int>> parallelDijkstra(const std::vector<unsigned int>& src_ips, const std::set<unsigned int>& destinations) {
+        std::vector<std::vector<unsigned int>> results;
+
+        #pragma omp parallel for
+        for (unsigned long int i = 0; i < src_ips.size(); ++i) {
+            auto result = dijkstra(src_ips[i], destinations);
+            #pragma omp critical
+            {
+                results.emplace_back(std::move(result));
+            }
+        }
+        return results;
+    }
+    
     void add_edge(const unsigned int &u, const unsigned int &v) {
         graph[u].insert(v);
         graph[v].insert(u);
@@ -105,5 +120,8 @@ PYBIND11_MODULE(graph_module, m) {
     py::class_<Graph>(m, "Graph")
         .def(py::init<>())
         .def("add_edge", &Graph::add_edge)
-        .def("dijkstra", &Graph::dijkstra).def("ipv4ToUInt", &Graph::ipv4ToUInt).def("uintToIPv4", &Graph::uintToIPv4);
+        .def("dijkstra", &Graph::dijkstra)
+        .def("ipv4ToUInt", &Graph::ipv4ToUInt)
+        .def("uintToIPv4", &Graph::uintToIPv4)
+        .def("parallelDijkstra", &Graph::parallelDijkstra);
 }
