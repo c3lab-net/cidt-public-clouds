@@ -5,10 +5,7 @@ import ast
 import itertools
 import re
 import sys
-import heapq
 import time
-
-from typing import Any
 
 from common import load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
@@ -27,51 +24,60 @@ def unsigned_int_to_ip(unsigned_int: int) -> str:
 
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
     print('Building graph from ITDK nodes/links ...', file=sys.stderr)
+
+    print('Loading links from file to memory ...', file=sys.stderr)
+    start_time = time.time()
+    with open(link_file) as file:
+        all_lines = file.readlines()
+    elapsed_time = time.time() - start_time
+    print(f'Elapsed: {elapsed_time}s, read {len(all_lines)} lines.', file=sys.stderr)
+
     graph = Graph()
     edge_count = 0
-    start_time = time.time()
     re_link = re.compile(r'^link L(?:\d+): +([N\d.: ]+)')
-    with open(link_file, 'r') as file:
-        for line in file:
-            if line.startswith('#'):
-                continue
 
-            m = re_link.match(line)
-            if not m:
-                print('Cannot process line:', line, file=sys.stderr)
-                continue
-            routers = m.group(1)
-            known_interfaces = set()
-            for router in routers.split():
-                # router is either Nxxx:1.2.3.4 (known interface) or Nxxxx (inferred interface).
-                # There's no links at IP level from known interface only, using inferred interface.
-                #   More detail: https://publicdata.caida.org/datasets/topology/ark/ipv4/itdk/2022-02/ under .links
-                # Because geo information is only tied to node ID, we need to use node ID to find the IP addresses.
-                node_id = router.split(':', 1)[0]
-                router_ips = itdk_node_id_to_ips.get(node_id, [])
+    print('Building adjacency list graph in memory ...', file=sys.stderr)
+    start_time = time.time()
+    for line in all_lines:
+        if line.startswith('#'):
+            continue
 
-                # # Without geo constraint, we can use this:
-                # splitted = router.split(':', 1)
-                # if len(splitted) > 1:
-                #     router_ip = splitted[1]
-                #     router_ips = [router_ip]
-                # else:
-                #     router_ips = itdk_node_id_to_ips.get(router, [])
-                #     # if len(router_ips) == 0:
-                #     #     print(f'WARNING: node {router} not found!', file=sys.stderr)
-                for router_ip in router_ips:
-                    known_interfaces.add(router_ip)
-            if len(known_interfaces) <= 1:
-                continue
-            # print(f'Found interfaces: {known_interfaces}', file=sys.stderr)
-            for (n1, n2) in itertools.combinations(known_interfaces, 2):
-                graph.add_edge(ip_to_unsigned_int(n1), ip_to_unsigned_int(n2))
+        m = re_link.match(line)
+        if not m:
+            print('Cannot process line:', line, file=sys.stderr)
+            continue
+        routers = m.group(1)
+        known_interfaces = set()
+        for router in routers.split():
+            # router is either Nxxx:1.2.3.4 (known interface) or Nxxxx (inferred interface).
+            # There's no links at IP level from known interface only, using inferred interface.
+            #   More detail: https://publicdata.caida.org/datasets/topology/ark/ipv4/itdk/2022-02/ under .links
+            # Because geo information is only tied to node ID, we need to use node ID to find the IP addresses.
+            node_id = router.split(':', 1)[0]
+            router_ips = itdk_node_id_to_ips.get(node_id, [])
 
-            edge_count += 1
-            if edge_count % 1000000 == 0:
-                elapsed_time = time.time() - start_time
-                print(f'Elapsed: {elapsed_time}s, edge count: {edge_count}', file=sys.stderr)
-                # break   # _debug_
+            # # Without geo constraint, we can use this:
+            # splitted = router.split(':', 1)
+            # if len(splitted) > 1:
+            #     router_ip = splitted[1]
+            #     router_ips = [router_ip]
+            # else:
+            #     router_ips = itdk_node_id_to_ips.get(router, [])
+            #     # if len(router_ips) == 0:
+            #     #     print(f'WARNING: node {router} not found!', file=sys.stderr)
+            for router_ip in router_ips:
+                known_interfaces.add(router_ip)
+        if len(known_interfaces) <= 1:
+            continue
+        # print(f'Found interfaces: {known_interfaces}', file=sys.stderr)
+        for (n1, n2) in itertools.combinations(known_interfaces, 2):
+            graph.add_edge(ip_to_unsigned_int(n1), ip_to_unsigned_int(n2))
+
+        edge_count += 1
+        if edge_count % 1000000 == 0:
+            elapsed_time = time.time() - start_time
+            print(f'Elapsed: {elapsed_time}s, edge count: {edge_count}', file=sys.stderr)
+            # break   # _debug_
     elapsed_time = time.time() - start_time
     print(f'Elapsed: {elapsed_time}s, total edge count: {edge_count}', file=sys.stderr)
     return graph
