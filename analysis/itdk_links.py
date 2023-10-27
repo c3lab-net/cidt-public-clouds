@@ -12,52 +12,18 @@ from typing import Any
 
 from common import load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
+from graph_module import Graph
 
-class Graph:
-    def __init__(self):
-        self.graph = {}
+import socket
+import struct
 
-    def add_edge(self, u, v):
-        if u not in self.graph:
-            self.graph[u] = []
-        self.graph[u].append(v)
-        if v not in self.graph:
-            self.graph[v] = []
-        self.graph[v].append(u)
+def ip_to_unsigned_int(ip: str) -> int:
+    packed_ip = socket.inet_aton(ip)
+    return struct.unpack("!I", packed_ip)[0]
 
-    def dijkstra(self, start, destinations: set = set()):
-        if start in destinations:
-            return [start]
-
-        min_heap: list[tuple[float, Any]] = [(0, start)]
-        distances = {node: float('inf') for node in self.graph}
-        distances[start] = 0
-        prev = {}
-        current_node = None
-
-        while min_heap:
-            _, current_node = heapq.heappop(min_heap)
-            if current_node in destinations:
-                break
-
-            for neighbor in self.graph.get(current_node, []):
-                distance = distances[current_node] + 1
-
-                if distance < distances[neighbor]:
-                    distances[neighbor] = distance
-                    heapq.heappush(min_heap, (distance, neighbor))
-                    prev[neighbor] = current_node
-
-        if current_node not in prev:
-            return None
-
-        path = [current_node]
-        while current_node != start:
-            current_node = prev[current_node]
-            path.append(current_node)
-        path.reverse()
-
-        return path
+def unsigned_int_to_ip(unsigned_int: int) -> str:
+    packed_ip = struct.pack("!I", unsigned_int)
+    return socket.inet_ntoa(packed_ip)
 
 def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='../data/caida-itdk/midar-iff.links') -> Graph:
     print('Building graph from ITDK nodes/links ...', file=sys.stderr)
@@ -99,7 +65,7 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
                 continue
             # print(f'Found interfaces: {known_interfaces}', file=sys.stderr)
             for (n1, n2) in itertools.combinations(known_interfaces, 2):
-                graph.add_edge(n1, n2)
+                graph.add_edge(ip_to_unsigned_int(n1), ip_to_unsigned_int(n2))
 
             edge_count += 1
             if edge_count % 1000000 == 0:
@@ -194,26 +160,28 @@ def main():
     else:
         dst_ips = []
 
+    
     # Build graph from ITDK nodes/links
     itdk_node_id_to_ips = load_itdk_node_id_to_ips_mapping()
     remove_node_without_geo_coordinates(itdk_node_id_to_ips)
     graph = load_itdk_graph_from_links(itdk_node_id_to_ips)
-
+    dst_ips = [ip_to_unsigned_int(item) for item in dst_ips]
     if not src_ips:
         src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
-
+    src_ips = [ip_to_unsigned_int(item) for item in src_ips]
+    
+    start_time = time.time()
     print(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...',
           file=sys.stderr)
-    paths = []
-    for i in range(len(src_ips)):
-        src_ip = src_ips[i]
-        print(f'Running dijkstra on src IP {src_ip} ({i}/{len(src_ips)}) ...', file=sys.stderr)
-        path = graph.dijkstra(src_ip, set(dst_ips))
-        if path:
-            paths.append(path)
-            print(path, flush=True)
-        else:
-            print(f'Cannot find path for src ip {src_ip}', file=sys.stderr)
+    paths = graph.parallelDijkstra(src_ips, set(dst_ips))
+    elapsed_time = time.time() - start_time
+    
+    print(f'Elapsed: {elapsed_time}s', file=sys.stderr)
+    paths = [[unsigned_int_to_ip(item) for item in path] for path in paths if path]
+    
+    for path in paths:
+        print(path, flush=True)
+
     print(f'Dijkstra completed. Found {len(paths)} paths in total.', file=sys.stderr)
 
 if __name__ == '__main__':
