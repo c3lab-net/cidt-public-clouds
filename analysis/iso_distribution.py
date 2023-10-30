@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
+
 import ast
-import sys
+import logging
 import argparse
+from common import init_logging
 from itdk_geo import load_itdk_node_ip_to_id_mapping, parse_node_geo_as_dataframe
 from carbon_client import get_carbon_region_from_coordinate
 
@@ -14,7 +17,7 @@ def convert_ip_to_coordinate(ip_address, node_ip_to_id, node_geo_df):
 
     # skipping node without geo coordinate
     if node_id not in node_geo_df.index:
-        print(f'Node ID {node_id} not found in node_geo_df', file=sys.stderr)
+        logging.info(f'Node ID {node_id} not found in node_geo_df')
         return None
     # Convert node ID to a coordinate using the node_geo_df dictionary
     row = node_geo_df.loc[node_id]
@@ -47,8 +50,7 @@ def get_all_coordinates_by_region(cloud) -> dict[str, list[tuple[float, float]]]
                 if ip_coordinate:
                     coordinates.append(ip_coordinate)
         coordinates_by_region[region] = coordinates
-        print(
-            f'Found {len(coordinates)} coordinates for {cloud}:{region}.', file=sys.stderr)
+        logging.info(f'Found {len(coordinates)} coordinates for {cloud}:{region}.')
 
     return coordinates_by_region
 
@@ -83,6 +85,8 @@ def parse_args():
 
 
 def main():
+    init_logging()
+
     # input set can be aws or gcloud, to filter the corresponding data
     args = parse_args()
 
