@@ -85,7 +85,7 @@ def parse_args():
 
 
 def main():
-    init_logging()
+    init_logging(level=logging.INFO)
 
     # input set can be aws or gcloud, to filter the corresponding data
     args = parse_args()

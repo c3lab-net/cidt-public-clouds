@@ -8,8 +8,8 @@ import logging
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
 
-def init_logging():
-    logging.basicConfig(level=logging.DEBUG,
+def init_logging(level=logging.DEBUG):
+    logging.basicConfig(level=level,
                         stream=sys.stderr,
                         format='%(asctime)s %(levelname)-8s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
