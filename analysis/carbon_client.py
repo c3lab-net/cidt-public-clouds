@@ -3,6 +3,7 @@
 import argparse
 from collections import Counter
 import logging
+import traceback
 
 import requests_cache
 
@@ -20,9 +21,11 @@ def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
     try:
         assert response.ok, "Carbon region lookup failed for %s (%d): %s" % (coordinate, response.status_code, response.text)
         response_json = response.json()
+        assert 'iso' in response_json, 'Invalid carbon region lookup response %s: %s' % (coordinate, response.text)
         return response_json['iso']
     except Exception as ex:
         logging.error(ex)
+        logging.error(traceback.format_exc())
         return 'Unknown'
 
 def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]]):
