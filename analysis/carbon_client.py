@@ -12,7 +12,8 @@ def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
     (latitude, longitude) = coordinate
     response = requests.get(f'{CARBON_API_URL}/balancing-authority/', params={
         'latitude': latitude,
-        'longitude': longitude
+        'longitude': longitude,
+        'iso_format': 'emap',
     })
     try:
         assert response.ok, "Carbon region lookup failed for %s (%d): %s" % (coordinate, response.status_code, response.text)
