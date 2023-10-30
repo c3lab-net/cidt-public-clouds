@@ -4,13 +4,15 @@ import argparse
 from collections import Counter
 import logging
 
-import requests
+import requests_cache
 
 from common import get_routes_from_file, CARBON_API_URL, init_logging
 
+session = requests_cache.CachedSession('carbon_cache', backend='memory')
+
 def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
     (latitude, longitude) = coordinate
-    response = requests.get(f'{CARBON_API_URL}/balancing-authority/', params={
+    response = session.get(f'{CARBON_API_URL}/balancing-authority/', params={
         'latitude': latitude,
         'longitude': longitude,
         'iso_format': 'emap',
