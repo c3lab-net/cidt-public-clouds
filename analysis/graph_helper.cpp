@@ -7,6 +7,7 @@
 #include <string>
 #include <tuple>
 #include <sstream>
+#include <iostream>
 #include <omp.h>
 #include <stdint.h>
 
@@ -25,6 +26,7 @@ public:
             #pragma omp critical
             {
                 results.emplace_back(std::move(result));
+                std::cerr << "Progress: " << results.size() << "/" << src_ips.size() << std::endl;
             }
         }
         return results;
