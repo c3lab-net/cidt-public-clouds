@@ -7,6 +7,8 @@ import time
 import logging
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
+MATCHED_NODES_FILENAME_AWS = 'matched_nodes.aws.by_region.txt'
+MATCHED_NODES_FILENAME_GCLOUD = 'matched_nodes.gcloud.by_region.txt'
 
 def init_logging(level=logging.DEBUG):
     logging.basicConfig(level=level,

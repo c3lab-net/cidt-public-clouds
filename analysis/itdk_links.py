@@ -8,7 +8,7 @@ import re
 import sys
 import time
 
-from common import init_logging, load_itdk_node_id_to_ips_mapping
+from common import MATCHED_NODES_FILENAME_AWS, MATCHED_NODES_FILENAME_GCLOUD, init_logging, load_itdk_node_id_to_ips_mapping
 from itdk_geo import get_node_ids_with_geo_coordinates
 from graph_module import Graph
 
@@ -85,9 +85,9 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
 
 def get_cloud_region_matched_ips(cloud, region) -> list[str]:
     if cloud == 'aws':
-        matched_nodes_filename = 'matched_nodes.aws.by_region.txt'
+        matched_nodes_filename = MATCHED_NODES_FILENAME_AWS
     elif cloud == 'gcloud':
-        matched_nodes_filename = 'matched_nodes.gcloud.by_region.txt'
+        matched_nodes_filename = MATCHED_NODES_FILENAME_GCLOUD
     else:
         raise ValueError(f'Unsupported cloud {cloud}')
 

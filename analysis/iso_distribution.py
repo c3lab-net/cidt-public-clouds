@@ -3,7 +3,7 @@
 import ast
 import logging
 import argparse
-from common import init_logging
+from common import MATCHED_NODES_FILENAME_AWS, MATCHED_NODES_FILENAME_GCLOUD, init_logging
 from itdk_geo import load_itdk_node_ip_to_id_mapping, parse_node_geo_as_dataframe
 from carbon_client import get_carbon_region_from_coordinate
 
@@ -26,9 +26,9 @@ def convert_ip_to_coordinate(ip_address, node_ip_to_id, node_geo_df):
 
 def get_all_coordinates_by_region(cloud) -> dict[str, list[tuple[float, float]]]:
     if cloud == 'aws':
-        matched_nodes_filename = 'matched_nodes.aws.by_region.txt'
+        matched_nodes_filename = MATCHED_NODES_FILENAME_AWS
     elif cloud == 'gcloud':
-        matched_nodes_filename = 'matched_nodes.gcloud.by_region.txt'
+        matched_nodes_filename = MATCHED_NODES_FILENAME_GCLOUD
     else:
         raise ValueError(f'Unsupported cloud {cloud}')
 
