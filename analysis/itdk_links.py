@@ -56,16 +56,6 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
             # Because geo information is only tied to node ID, we need to use node ID to find the IP addresses.
             node_id = router.split(':', 1)[0]
             router_ips = itdk_node_id_to_ips.get(node_id, [])
-
-            # # Without geo constraint, we can use this:
-            # splitted = router.split(':', 1)
-            # if len(splitted) > 1:
-            #     router_ip = splitted[1]
-            #     router_ips = [router_ip]
-            # else:
-            #     router_ips = itdk_node_id_to_ips.get(router, [])
-            #     # if len(router_ips) == 0:
-            #     #     print(f'WARNING: node {router} not found!', file=sys.stderr)
             for router_ip in router_ips:
                 known_interfaces.add(router_ip)
         if len(known_interfaces) <= 1:
@@ -83,7 +73,7 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
     logging.info(f'Elapsed: {elapsed_time:.2f}s, total edge count: {edge_count}')
     return graph
 
-def get_cloud_region_matched_ips(cloud, region) -> list[str]:
+def get_cloud_region_matched_ips(cloud: str, region: str) -> list[str]:
     if cloud == 'aws':
         matched_nodes_filename = MATCHED_NODES_FILENAME_AWS
     elif cloud == 'gcloud':
@@ -113,10 +103,10 @@ def get_cloud_region_matched_ips(cloud, region) -> list[str]:
     return ips
 
 def remove_node_without_geo_coordinates(itdk_node_id_to_ips: dict):
-    logging.info('Removing nodes without geocoordinates ...')
     nodes_with_geo_coordinates = set(get_node_ids_with_geo_coordinates())
     removed_count = 0
 
+    logging.info('Removing nodes without geocoordinates ...')
     processed_count = 0
     start_time = time.time()
     for node_id in itdk_node_id_to_ips.copy().keys():
@@ -134,8 +124,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--src-cloud', required=False, choices=[ 'aws', 'gcloud' ], help='The source cloud provider')
     parser.add_argument('--dst-cloud', required=False, choices=[ 'aws', 'gcloud' ], help='The destination cloud provider')
-    parser.add_argument('--src-region', required=False, help='The source region')
-    parser.add_argument('--dst-region', required=False, help='The destination region')
+    parser.add_argument('--src-regions', type=str, nargs='+', required=False, help='The source regions')
+    parser.add_argument('--dst-regions', type=str, nargs='+', required=False, help='The destination regions')
 
     parser.add_argument('--src-nodes', required=False, nargs='+', help='The source node ids')
     parser.add_argument('--dst-nodes', required=False, nargs='+', help='The destination node ids')
@@ -152,21 +142,20 @@ def parse_args():
 
     return parser.parse_args()
 
+def load_ips_in_groups(cloud: str, regions: list[str], ips: list[str]) -> dict[str, list[str]]:
+    """Load IPs in a set of regions, for later batched execution."""
+    if regions:
+        return { f'{cloud}:{region}': get_cloud_region_matched_ips(cloud, region) for region in regions }
+    elif ips:
+        return { '': ips }
+    else:
+        return {}
+
 def main():
     init_logging()
     args = parse_args()
-    if args.src_cloud:
-        src_ips = get_cloud_region_matched_ips(args.src_cloud, args.src_region)
-    elif args.src_ips:
-        src_ips = args.src_ips
-    else:
-        src_ips = []
-    if args.dst_cloud:
-        dst_ips = get_cloud_region_matched_ips(args.dst_cloud, args.dst_region)
-    elif args.dst_ips:
-        dst_ips = list(args.dst_ips)
-    else:
-        dst_ips = []
+    src_ips_groups = load_ips_in_groups(args.src_cloud, args.src_regions, args.src_ips)
+    dst_ips_groups = load_ips_in_groups(args.dst_cloud, args.dst_regions, args.dst_ips)
 
     # Build graph from ITDK nodes/links
     itdk_node_id_to_ips = load_itdk_node_id_to_ips_mapping()
@@ -174,23 +163,33 @@ def main():
     graph = load_itdk_graph_from_links(itdk_node_id_to_ips)
 
     # Load the set of source and destination IPs
-    if not src_ips:
-        src_ips = [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]]
-    src_ips = [ip_to_unsigned_int(item) for item in src_ips]
-    dst_ips = [ip_to_unsigned_int(item) for item in dst_ips]
+    if not src_ips_groups:
+        src_ips_groups = { '': [ip for node_id in args.src_nodes for ip in itdk_node_id_to_ips[node_id]] }
+    if not dst_ips_groups:
+        dst_ips_groups = { '': [ip for node_id in args.dst_nodes for ip in itdk_node_id_to_ips[node_id]] }
 
-    # Run Dijkstra in parallel
-    logging.info(f'Finding paths from {args.src_cloud}:{args.src_region} to {args.dst_cloud}:{args.dst_region} ...')
-    start_time = time.time()
-    paths = graph.parallelDijkstra(src_ips, set(dst_ips))
-    elapsed_time = time.time() - start_time
-    logging.info(f'Elapsed: {elapsed_time}s')
+    for src_group in src_ips_groups:
+        for dst_group in dst_ips_groups:
+            # Skip same region routes
+            if src_group and src_group == dst_group:
+                continue
 
-    paths = [[unsigned_int_to_ip(item) for item in path] for path in paths if path]
-    for path in paths:
-        print(path)
+            src_ips = [ip_to_unsigned_int(item) for item in src_ips_groups[src_group]]
+            dst_ips = [ip_to_unsigned_int(item) for item in dst_ips_groups[dst_group]]
 
-    logging.info(f'Dijkstra completed. Found {len(paths)} paths in total.')
+            # Run Dijkstra in parallel
+            logging.info(f'Finding paths from {src_group} to {dst_group} ...')
+            start_time = time.time()
+            paths = graph.parallelDijkstra(src_ips, set(dst_ips))
+            elapsed_time = time.time() - start_time
+            logging.info(f'Elapsed: {elapsed_time}s')
+
+            print(f'# {src_group} -> {dst_group}')
+            paths = [[unsigned_int_to_ip(item) for item in path] for path in paths if path]
+            for path in paths:
+                print(path)
+
+            logging.info(f'Dijkstra from {src_group} to {dst_group} completed. Found {len(paths)} paths in total.')
 
 if __name__ == '__main__':
     main()
