@@ -31,7 +31,11 @@ public:
         }
         return results;
     }
-    
+
+    void reserve(const size_t size) {
+        graph.reserve(size);
+    }
+
     void add_edge(const unsigned int &u, const unsigned int &v) {
         graph[u].insert(v);
         graph[v].insert(u);
@@ -89,6 +93,7 @@ public:
 PYBIND11_MODULE(graph_module, m) {
     py::class_<Graph>(m, "Graph")
         .def(py::init<>())
+        .def("reserve", &Graph::reserve)
         .def("add_edge", &Graph::add_edge)
         .def("parallelDijkstra", &Graph::parallelDijkstra);
 }

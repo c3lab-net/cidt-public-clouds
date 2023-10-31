@@ -34,6 +34,7 @@ def load_itdk_graph_from_links(itdk_node_id_to_ips: dict[str, list], link_file='
     logging.info(f'Elapsed: {elapsed_time}s, read {len(all_lines)} lines.')
 
     graph = Graph()
+    graph.reserve(len(itdk_node_id_to_ips))
     edge_count = 0
     re_link = re.compile(r'^link L(?:\d+): +([N\d.: ]+)')
 
@@ -179,6 +180,7 @@ def main():
 
             # Run Dijkstra in parallel
             logging.info(f'Finding paths from {src_group} to {dst_group} ...')
+            logging.info(f'Source IP count: {len(src_ips)}, destination IP count: {len(dst_ips)}')
             start_time = time.time()
             paths = graph.parallelDijkstra(src_ips, set(dst_ips))
             elapsed_time = time.time() - start_time
