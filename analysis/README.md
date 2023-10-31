@@ -40,3 +40,16 @@ This produces a file that contains one route on each line, for each source IP, a
 ```Shell
 ./carbon_client.py --export-routes-distribution --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_iso
 ```
+
+## Clean up noisy routes
+
+Due to inaccurate IP ranges or geolocation lookup, there can be routes that don't conform to the rough geographical regions, or carbon regions.
+To get around this problem, we can get the ISO distribution for each cloud region, and manually pick the "correct" one by checking the map and (most of the time) picking the majority.
+```Shell
+./iso_distribution.py --cloud aws > iso_distribution.aws.txt
+```
+
+After manual inspection, we can save the result in [CSV files](./results/iso_distributions/) and later use this information to prune the routes (by the correct src/dst ISOs).
+```Shell
+# TODO: add route filtering.
+```
