@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/iostream.h>
 #include <unordered_map>
 #include <vector>
 #include <queue>
@@ -90,5 +91,6 @@ PYBIND11_MODULE(graph_module, m) {
     py::class_<Graph>(m, "Graph")
         .def(py::init<>())
         .def("add_edge", &Graph::add_edge)
-        .def("parallelDijkstra", &Graph::parallelDijkstra);
+        .def("parallelDijkstra", &Graph::parallelDijkstra,
+            py::call_guard<py::scoped_ostream_redirect, py::scoped_estream_redirect>());
 }
