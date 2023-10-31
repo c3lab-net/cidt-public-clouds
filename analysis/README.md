@@ -21,6 +21,8 @@ This directory holds the analysis script using the CAIDA ITDK dataset and public
 ```
 This produces a file that contains one route on each line, for each source IP, and the route is represented by a list of IP addresses.
 
+**Note** that this part can take a long time, including both the time to load node (3min) and geo files (30s), build the graph (25min) and run Dijkstra (variable dependings on the # of inputs). We've parallelized the Dijkstra code, but not the building graph part, so it's better to invoke this on a large # of regions, or an entire cloud to amortize the startup cost, and later split the results.
+
 - We next convert each IP address to a (lat, long) geocoordinate using the ITDK `.nodes.geo` database:
 ```Shell
 ./itdk_geo.py --convert-ip-to-latlon --routes_file routes.aws.us-west-1.us-east-1.by_ip 1> routes.aws.us-west-1.us-east-1.by_geo
