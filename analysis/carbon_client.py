@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+import csv
 import logging
 import traceback
 
@@ -48,6 +49,28 @@ def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]]):
         print(route_in_carbon_region)
     return routes_in_carbon_region
 
+def load_region_to_iso_groud_truth(iso_ground_truth_csv: str):
+    with open(iso_ground_truth_csv, 'r') as f:
+        csv_reader = csv.DictReader(f)
+        d_region_to_iso = { row['region']: row['iso'] for row in csv_reader }
+    return d_region_to_iso
+
+def filter_iso_by_ground_truth(routes: list[list], src_region: str, dst_region: str,
+                               iso_ground_truth: dict[str, str]) -> list[list]:
+    """Filter the routes by ground truth ISOs of the src and dst regions, aka the first and last hop."""
+    logging.info('Filtering ISO by ground truth ...')
+
+    src_iso = iso_ground_truth[src_region]
+    dst_iso = iso_ground_truth[dst_region]
+
+    filtered_routes = []
+    for route in routes:
+        if routes and route[0] == src_iso and route[-1] == dst_iso:
+            filtered_routes.append(route)
+
+    logging.info('Filtered/Total: %d/%d', len(filtered_routes), len(routes))
+    return filtered_routes
+
 def export_routes_distribution(routes: list[list]):
     logging.info('Exporting routes distribution ...')
 
@@ -62,10 +85,24 @@ def parse_args():
                         help='Convert the routes from lat/lon coordinates to Carbon region names.')
     parser.add_argument('--export-routes-distribution', action='store_true',
                         help='Export the routes distribution.')
+    parser.add_argument('--filter-iso-by-ground-truth', action='store_true', help='Filter the routes by ground truth ISOs.')
+    parser.add_argument('--iso-ground-truth-csv', type=str, help='The CSV file containing the ground truth ISOs.')
+    parser.add_argument('--src-region', required=False, help='The source region')
+    parser.add_argument('--dst-region', required=False, help='The destination region')
     args = parser.parse_args()
 
     if (args.convert_latlon_to_carbon_region or args.export_routes_distribution) and args.routes_file is None:
         parser.error('routes_file must be specified when --convert-latlon-to-carbon-region or --export-routes-distribution is specified')
+
+    if args.filter_iso_by_ground_truth:
+        if not args.export_routes_distribution:
+            parser.error('--filter-iso-by-ground-truth can only be used with --export-routes-distribution')
+        if not args.iso_ground_truth_csv:
+            parser.error('--iso-ground-truth-csv must be specified when --filter-iso-by-ground-truth is specified')
+        if not args.src_region:
+            parser.error('--src-region must be specified when --filter-iso-by-ground-truth is specified')
+        if not args.dst_region:
+            parser.error('--dst-region must be specified when --filter-iso-by-ground-truth is specified')
 
     return args
 
@@ -78,6 +115,9 @@ def main():
         # print(routes_in_carbon_region)
     elif args.export_routes_distribution:
         routes = get_routes_from_file(args.routes_file)
+        if args.filter_iso_by_ground_truth:
+            iso_ground_truth = load_region_to_iso_groud_truth(args.iso_ground_truth_csv)
+            routes = filter_iso_by_ground_truth(routes, args.src_region, args.dst_region, iso_ground_truth)
         export_routes_distribution(routes)
     else:
         raise ValueError('No action specified')
