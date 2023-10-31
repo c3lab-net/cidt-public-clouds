@@ -19,6 +19,7 @@ public:
 
     std::vector<std::vector<unsigned int>> parallelDijkstra(const std::vector<unsigned int>& src_ips, const std::set<unsigned int>& destinations) {
         std::vector<std::vector<unsigned int>> results;
+        results.reserve(src_ips.size());
 
         #pragma omp parallel for
         for (unsigned long int i = 0; i < src_ips.size(); ++i) {
@@ -48,6 +49,7 @@ public:
 
         std::priority_queue<std::tuple<int_fast8_t, unsigned int>, std::vector<std::tuple<int_fast8_t, unsigned int>>, std::greater<std::tuple<int_fast8_t, unsigned int>>> min_heap;
         std::unordered_map<unsigned int, int_fast8_t> distances;
+        distances.reserve(graph.size());
         for (const auto &pair : graph) {
             distances[pair.first] = INT_FAST8_MAX;
         }
