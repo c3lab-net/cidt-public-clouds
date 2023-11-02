@@ -1,0 +1,3 @@
+[submodule "thirdparty/iGDB"]
+	path = thirdparty/iGDB
+	url = git@github.com:c3lab-net/iGDB.git
