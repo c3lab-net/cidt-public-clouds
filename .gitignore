@@ -1,6 +1,10 @@
 /analysis/results/
+/analysis/!*.py
+/analysis/*route*
+/analysis/*.txt
 /analysis/matched_nodes.*.txt
 /data/caida-itdk/data/
+/data/cloud/ip-prefixes/
 
 
 # Byte-compiled / optimized / DLL files
