@@ -40,11 +40,14 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
 
     for ip_addresses in routes:
         # Convert each IP address to a node ID using the node_ip_to_id dictionary
-        node_ids = [node_ip_to_id[ip] for ip in ip_addresses]
+        node_ids = [node_ip_to_id.get(ip, '') for ip in ip_addresses]
 
         # Convert node IDs to latitude and longitude using the node_geo_df dictionary
         coordinates = []
         for node_id in node_ids:
+            if not node_id:
+                logging.warning(f'Ignoring unknown node with ip {ip_addresses}')
+                continue
             # _debug_
             if node_id not in node_geo_df.index:
                 logging.error(f'Node ID {node_id} not found in node_geo_df')

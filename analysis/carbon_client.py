@@ -74,7 +74,7 @@ def filter_iso_by_ground_truth(routes: list[list], src_region: str, dst_region: 
 def export_routes_distribution(routes: list[list]):
     logging.info('Exporting routes distribution ...')
 
-    routes_as_str = [ '|'.join(route) for route in routes ]
+    routes_as_str = [ '|'.join([str(e) for e in route]) for route in routes ]
     for route_str, count in sorted(Counter(routes_as_str).items(), key=lambda x: x[1], reverse=True):
         print(count, route_str)
 

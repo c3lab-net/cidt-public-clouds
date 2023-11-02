@@ -89,7 +89,7 @@ def load_itdk_mapping_internal(node_file, reverse=False) -> dict:
 def load_itdk_node_id_to_ips_mapping(node_file='../data/caida-itdk/midar-iff.nodes') -> dict[str, list]:
     return load_itdk_mapping_internal(node_file, False)
 
-def load_itdk_node_ip_to_id_mapping(node_file='../data/caida-itdk/midar-iff.nodes') -> dict[str, list]:
+def load_itdk_node_ip_to_id_mapping(node_file='../data/caida-itdk/midar-iff.nodes') -> dict[str, str]:
     return load_itdk_mapping_internal(node_file, True)
 
 def get_routes_from_file(filename) -> list[list]:

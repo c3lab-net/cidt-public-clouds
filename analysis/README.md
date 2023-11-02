@@ -35,7 +35,7 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - Now with the routes in `(lat,lon)-coordinate` format, we can look up the carbon region or ISO (independent system operator) information with our carbon API.
 ```Shell
-./carbon_region.py --convert-latlon-to-carbon-region --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_iso
+./carbon_client.py --convert-latlon-to-carbon-region --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_iso
 ```
 
 - Finally, we can export the distribution for easy lookup later (e.g. in a database).
