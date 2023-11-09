@@ -3,6 +3,7 @@
 import ast
 import logging
 import argparse
+from typing import Any
 from common import MATCHED_NODES_FILENAME_AWS, MATCHED_NODES_FILENAME_GCLOUD, init_logging
 from itdk_geo import load_itdk_node_ip_to_id_mapping, parse_node_geo_as_dataframe
 from carbon_client import get_carbon_region_from_coordinate
@@ -66,22 +67,28 @@ def convert_all_coordinates_to_isos(coordinates_by_region: dict[str, list[tuple[
     return isos_by_region
 
 
-def get_iso_occurence_by_region(isos_by_region: dict[str, list[str]]) -> dict[str, dict[str, int]]:
-    iso_occurence_by_region = {}
-    for region, iso_list in isos_by_region.items():
-        region_iso_occurence = {}
-        for iso in iso_list:
-            region_iso_occurence[iso] = region_iso_occurence.get(iso, 0) + 1
-        iso_occurence_by_region[region] = region_iso_occurence
-    return iso_occurence_by_region
+def get_occurence_by_region(items_by_region: dict[str, list[Any]]) -> dict[str, dict[Any, int]]:
+    occurence_by_region = {}
+    for region, item_list in items_by_region.items():
+        occurence = {}
+        for item in item_list:
+            occurence[item] = occurence.get(item, 0) + 1
+        occurence_by_region[region] = occurence
+    return occurence_by_region
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cloud', required=True,
                         choices=['aws', 'gcloud'], help='The cloud provider you wish to get the iso occurence')
+    parser.add_argument('--of-iso', action='store_true', help='Output distribution of ISOs')
+    parser.add_argument('--of-coordinate', action='store_true', help='Output distribution of coordinates')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    assert args.of_iso ^ args.of_coordinate, 'Please specify either --of-iso or --of-coordinate'
+
+    return args
 
 
 def main():
@@ -93,15 +100,20 @@ def main():
     # change region to a dictionary of coordinates
     coordinates_by_region = get_all_coordinates_by_region(args.cloud)
 
-    # convert coordinates to ISOs by Region
-    isos_by_region = convert_all_coordinates_to_isos(coordinates_by_region)
+    # do stastics for coordinates distribution for each region
+    if args.of_coordinate:
+        coordinate_occurence_by_region = get_occurence_by_region(coordinates_by_region)
 
-    # do stastics for ISOs distribution for each region
-    iso_occurence_by_region = get_iso_occurence_by_region(isos_by_region)
+        for region, coordinate_occurence in coordinate_occurence_by_region.items():
+            print(f"Region {region} has coordinate distributions: {coordinate_occurence}")
+    elif args.of_iso:
+        isos_by_region = convert_all_coordinates_to_isos(coordinates_by_region)
+        iso_occurence_by_region = get_occurence_by_region(isos_by_region)
 
-    # print out the result or save to a file
-    for region, iso_occurence in iso_occurence_by_region.items():
-        print(f"Region {region} has iso distributions: {iso_occurence}")
+        for region, iso_occurence in iso_occurence_by_region.items():
+            print(f"Region {region} has iso distributions: {iso_occurence}")
+    else:
+        raise ValueError('No action specified')
 
 
 if __name__ == '__main__':

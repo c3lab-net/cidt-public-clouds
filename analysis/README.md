@@ -48,7 +48,12 @@ This produces a file that contains one route on each line, for each source IP, a
 Due to inaccurate IP ranges or geolocation lookup, there can be routes that don't conform to the rough geographical regions, or carbon regions.
 To get around this problem, we can get the ISO distribution for each cloud region, and manually pick the "correct" one by checking the map and (most of the time) picking the majority.
 ```Shell
-./iso_distribution.py --cloud aws > iso_distribution.aws.txt
+./cloud_region_distribution.py --cloud aws --of-iso > iso_distribution.aws.txt
+```
+
+(Optional) We can also get a distribution of the geo-coordinates of each region based on the matched IPs, and manually inspect the result to get the location in city/state/country.
+```Shell
+./cloud_region_distribution.py --cloud aws --of-coordinate > gps_distribution.aws.txt
 ```
 
 After manual inspection, we can save the result in [CSV files](./results/iso_distributions/) and later use this information to prune the routes (by the correct src/dst ISOs).
