@@ -60,3 +60,9 @@ After manual inspection, we can save the result in [CSV files](./results/iso_dis
 ```Shell
 ./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.aws.csv --src-region us-west-1 --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
 ```
+
+## (Optional) Utility scripts
+When splitting calculation among multiple nodes, sometimes it's desireable to split a single region into multiple parts, as different region has different number of IPs.
+```Shell
+./split_cloud_region.matched_nodes.py -c gcloud --region us-central1 --parts 3 > matched_nodes.gcloud.by_region.modified.txt
+```
