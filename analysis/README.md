@@ -15,6 +15,8 @@ This directory holds the analysis script using the CAIDA ITDK dataset and public
 ./itdk_nodes.py --convert_to_by_region -c aws --matched_nodes_file matched_nodes.aws.by_node.txt > matched_nodes.aws.by_region.txt
 ```
 
+### Single region pair
+
 - We can then use this to calculate region-to-region routes by running Dijkstra's algorithm from each source IP to the set of destination IPs. The graph comes from the ITDK node/link dataset, which is quite large and thus this step can take minutes to hours, depending on the number of IPs.
 ```Shell
 ./itdk_links.py --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 1> routes.aws.us-west-1.us-east-1.by_ip 2> routes.aws.us-west-1.us-east-1.err
@@ -41,6 +43,41 @@ This produces a file that contains one route on each line, for each source IP, a
 - Finally, we can export the distribution for easy lookup later (e.g. in a database).
 ```Shell
 ./carbon_client.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
+```
+
+### All region pairs (batch execution)
+
+We created a [batch execution script](./run_all.itdk_links.sh) to loop through all the region pairs that we're interested in and run Dijkstra's in parallel across multiple machines.
+This can take days even across multiple machines (with dozens of cores on each), so adjust the script to match your distributed execution platform as needed.
+```Shell
+./run_all.itdk_links.sh
+```
+This will generate a list of files (named `hostname.numa{0,1}.routes.{aws,gcloud}.*.{aws,gcloud}.all.by_ip`) from one region (e.g. AWS:us-west-1) to all destination regions in one file, separated by comment lines.
+
+We can then use this script to organize and split all these files into one file per source/destination region pair, e.g. `routes.aws.us-east-1.aws.eu-west-1.by_ip`.
+```Shell
+./split_cloud_region.all.by_ip.sh
+```
+This will put the existing files in a sub-directory called `rawdata` and store all the per-region-pair `.by_ip` files into a sub-directory `region_pair.by_ip`.
+
+Afterwards, we can run IP-to-geo-coordinate, geo-coordinate-to-ISO and ISO distribution steps in parallel.
+Note that IP-to-geo script accepts multiple input files, due to its overhead of loading the GEO dataset. The other two scripts can be easily ran in a for loop.
+```Shell
+set -e
+./itdk_geo.py --convert-ip-to-latlon --routes_file region_pair.by_ip/routes.*.by_ip --outputs
+chmod 440 routes.*.by_geo
+for file in routes.*.by_geo; do
+    echo "Processing $file ..."
+    name="$(basename "$file" ".by_geo")"
+    ./carbon_client.py --convert-latlon-to-carbon-region --routes_file $file > $name.by_iso
+    ./carbon_client.py --export-routes-distribution --routes_file $name.by_iso > $name.by_iso.distribution
+    chmod 440 $name.by_iso $name.by_iso.distribution
+done
+
+mkdir region_pair.by_geo region_pair.by_iso region_pair.by_iso.distribution
+mv routes.*.by_geo region_pair.by_geo/
+mv routes.*.by_iso region_pair.by_iso/
+mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
 ```
 
 ## Clean up noisy routes

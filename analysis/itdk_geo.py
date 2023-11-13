@@ -3,6 +3,7 @@
 import argparse
 import io
 import logging
+import os
 import sys
 from typing import Optional
 import pandas as pd
@@ -41,7 +42,11 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_
     logging.info('Converting routes from IPs to lat/lons ...')
     converted_routes = []
 
-    output = open(output_file, 'w') if output_file else None
+    if output_file:
+        output = open(output_file, 'w')
+        logging.info(f'Writing (lat, lon) routes to {output_file} ...')
+    else:
+        output = None
     for ip_addresses in routes:
         # Convert each IP address to a node ID using the node_ip_to_id dictionary
         node_ids = [node_ip_to_id.get(ip, '') for ip in ip_addresses]
@@ -99,7 +104,7 @@ def main():
             routes_file: str = args.routes_files[i]
             if args.outputs is not None:
                 if len(args.outputs) == 0:
-                    output_file = routes_file.removesuffix('.by_ip') + '.by_geo'
+                    output_file = os.path.basename(routes_file).removesuffix('.by_ip') + '.by_geo'
                 else:
                     output_file = args.outputs[i]
             else:
