@@ -33,6 +33,7 @@ def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
         return 'Unknown'
 
 def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]], output: Optional[io.TextIOWrapper] = None):
+    logging.info('Converting lat/lon to carbon region ...')
     coordinates = set()
     for route in routes:
         for coordinate in route:
@@ -111,7 +112,7 @@ def parse_args():
     return args
 
 def main():
-    init_logging()
+    init_logging(level=logging.INFO)
     args = parse_args()
     if args.convert_latlon_to_carbon_region:
         routes = get_routes_from_file(args.routes_file)
