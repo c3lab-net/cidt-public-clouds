@@ -3,8 +3,11 @@
 import argparse
 from collections import Counter
 import csv
+import io
 import logging
+import sys
 import traceback
+from typing import Optional
 
 import requests_cache
 
@@ -29,7 +32,7 @@ def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
         logging.error(traceback.format_exc())
         return 'Unknown'
 
-def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]]):
+def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]], output: Optional[io.TextIOWrapper] = None):
     coordinates = set()
     for route in routes:
         for coordinate in route:
@@ -46,7 +49,7 @@ def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]]):
             carbon_region = d_coordinate_to_carbon_region[coordinate]
             route_in_carbon_region.append(carbon_region)
         routes_in_carbon_region.append(route_in_carbon_region)
-        print(route_in_carbon_region)
+        print(route_in_carbon_region, file=output if output else sys.stdout)
     return routes_in_carbon_region
 
 def load_region_to_iso_groud_truth(iso_ground_truth_csv: str):
@@ -71,16 +74,17 @@ def filter_iso_by_ground_truth(routes: list[list], src_region: str, dst_region: 
     logging.info('Filtered/Total: %d/%d', len(filtered_routes), len(routes))
     return filtered_routes
 
-def export_routes_distribution(routes: list[list]):
+def export_routes_distribution(routes: list[list], output: Optional[io.TextIOWrapper] = None):
     logging.info('Exporting routes distribution ...')
 
     routes_as_str = [ '|'.join([str(e) for e in route]) for route in routes ]
     for route_str, count in sorted(Counter(routes_as_str).items(), key=lambda x: x[1], reverse=True):
-        print(count, route_str)
+        print(count, route_str, file=output if output else sys.stdout)
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--routes_file', type=str, help='The routes file, each line contains a list of (lat, long) coordinates and represents a route.')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='The output file.')
     parser.add_argument('--convert-latlon-to-carbon-region', action='store_true',
                         help='Convert the routes from lat/lon coordinates to Carbon region names.')
     parser.add_argument('--export-routes-distribution', action='store_true',
@@ -111,14 +115,13 @@ def main():
     args = parse_args()
     if args.convert_latlon_to_carbon_region:
         routes = get_routes_from_file(args.routes_file)
-        routes_in_carbon_region = convert_latlon_to_carbon_region(routes)
-        # print(routes_in_carbon_region)
+        convert_latlon_to_carbon_region(routes, args.output)
     elif args.export_routes_distribution:
         routes = get_routes_from_file(args.routes_file)
         if args.filter_iso_by_ground_truth:
             iso_ground_truth = load_region_to_iso_groud_truth(args.iso_ground_truth_csv)
             routes = filter_iso_by_ground_truth(routes, args.src_region, args.dst_region, iso_ground_truth)
-        export_routes_distribution(routes)
+        export_routes_distribution(routes, args.output)
     else:
         raise ValueError('No action specified')
 
