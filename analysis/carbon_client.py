@@ -10,7 +10,7 @@ import requests_cache
 
 from common import get_routes_from_file, CARBON_API_URL, init_logging
 
-session = requests_cache.CachedSession('carbon_cache', backend='memory')
+session = requests_cache.CachedSession('carbon_cache', backend='filesystem')
 
 def get_carbon_region_from_coordinate(coordinate: tuple[float, float]):
     (latitude, longitude) = coordinate

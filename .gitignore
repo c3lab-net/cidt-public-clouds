@@ -1,4 +1,5 @@
 /analysis/results/
+/analysis/carbon_cache/
 /analysis/!*.py
 /analysis/*route*
 /analysis/*.txt
