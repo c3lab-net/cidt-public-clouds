@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
+import io
 import logging
+import sys
+from typing import Optional
 import pandas as pd
 
 from common import get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
@@ -34,7 +37,7 @@ def get_node_ids_with_geo_coordinates():
     node_geo_df = parse_node_geo_as_dataframe()
     return node_geo_df.index.tolist()
 
-def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
+def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output: Optional[io.TextIOWrapper] = None):
     logging.info('Converting routes from IPs to lat/lons ...')
     converted_routes = []
 
@@ -60,7 +63,7 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
             continue
 
         # Append the converted route to the result
-        print(coordinates)
+        print(coordinates, file=output if output else sys.stdout)
         converted_routes.append(coordinates)
 
     logging.info('Done')
@@ -71,6 +74,7 @@ def parse_args():
     parser.add_argument('--routes_file', type=str, help='The routes file, each line contains a list that represents a route.')
     parser.add_argument('--convert-ip-to-latlon', action='store_true',
                         help='Convert the routes from IP addresses to lat/lon coordinates')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='The output file.')
     args = parser.parse_args()
 
     if args.convert_ip_to_latlon and args.routes_file is None:
@@ -85,8 +89,7 @@ def main():
         routes = get_routes_from_file(args.routes_file)
         node_ip_to_id = load_itdk_node_ip_to_id_mapping()
         node_geo_df = parse_node_geo_as_dataframe()
-        routes_by_latlon = convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df)
-        # print(routes_by_latlon)
+        convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, args.output)
     else:
         raise ValueError('No action specified')
 
