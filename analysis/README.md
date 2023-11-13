@@ -69,8 +69,13 @@ chmod 440 routes.*.by_geo
 for file in routes.*.by_geo; do
     echo "Processing $file ..."
     name="$(basename "$file" ".by_geo")"
-    ./carbon_client.py --convert-latlon-to-carbon-region --routes_file $file > $name.by_iso
-    ./carbon_client.py --export-routes-distribution --routes_file $name.by_iso > $name.by_iso.distribution
+    ./carbon_client.py --convert-latlon-to-carbon-region --routes_file "$file" > "$name".by_iso
+    src_cloud="$(echo "$name" | awk -F. '{print $2}')"
+    src_region="$(echo "$name" | awk -F. '{print $3}')"
+    dst_cloud="$(echo "$name" | awk -F. '{print $4}')"
+    dst_region="$(echo "$name" | awk -F. '{print $5}')"
+    ./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud "$src_cloud" --src-region "$src_region" --dst-cloud "$dst_cloud" --dst-region "$dst_region" --routes_file "$name.by_iso" > "$name.by_iso.distribution"
+    chmod 440 "$name.by_iso.distribution"
     chmod 440 $name.by_iso $name.by_iso.distribution
 done
 
