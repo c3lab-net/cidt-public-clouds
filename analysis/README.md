@@ -32,7 +32,7 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - (Optional) We can visualize the routes using the plot script:
 ```Shell
-./plot.routes.distribution.py --routes_file routes.aws.us-west-1.us-east-1.by_geo
+./plot.routes.single_region_pair.py --routes_file routes.aws.us-west-1.us-east-1.by_geo
 ```
 
 - Now with the routes in `(lat,lon)-coordinate` format, we can look up the carbon region or ISO (independent system operator) information with our carbon API.
