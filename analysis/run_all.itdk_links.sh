@@ -9,18 +9,40 @@ export GCP_REGIONS="europe-central2 europe-north1 europe-west1 europe-west2 euro
 # export SRC_REGION="TBD"
 export HOSTNAME="$(hostname -s)"
 
-# Note: these are meant to be run over multiple console windows and over multiple machines.
-#   Remove the tee redirects if you want to run them in the background.
+# Note: Each call is meant to be run over multiple console windows and over multiple machines.
+#   Remove the tee redirects if you want to run them in the background and don't want to see output in console.
 #   Use other batch execution systems if you want to automatically run them on multiple machines.
 
+run_single_src_region_to_entire_cloud()
+{
+    numanode=$1
+    src_cloud=$2
+    src_region=$3
+    dst_cloud=$4
+    if [ $dst_cloud = "aws" ]; then
+        dst_regions="$AWS_REGIONS"
+    elif [ $dst_cloud = "gcloud" ]; then
+        dst_regions="$GCP_REGIONS"
+    else
+        echo "ERROR: unknown dst_cloud=$dst_cloud"
+        exit 1
+    fi
+    numactl --cpunodebind=$numanode --membind=$numanode \
+        /usr/bin/time -v \
+        ./itdk_links.py --src-cloud $src_cloud --src-regions $src_region \
+                        --dst-cloud $dst_cloud --dst-regions $(echo "$dst_regions") \
+            1> >(tee $HOSTNAME.numa$numanode.routes.$src_cloud.$src_region.$dst_cloud.all.by_ip) \
+            2> >(tee $HOSTNAME.numa$numanode.routes.$src_cloud.$src_region.$dst_cloud.all.err >&2)
+}
+
 # From AWS
-for SRC_REGION in $(echo $AWS_REGIONS); do
-	NUMANODE=0 && numactl --cpunodebind=$NUMANODE --membind=$NUMANODE /usr/bin/time -v ./itdk_links.py --src-cloud gcloud --src-regions $SRC_REGION --dst-cloud aws --dst-regions $(echo "$AWS_REGIONS") 1> >(tee $HOSTNAME.numa$NUMANODE.routes.aws.$SRC_REGION.aws.all.by_ip) 2> >(tee $HOSTNAME.numa$NUMANODE.routes.aws.$SRC_REGION.aws.all.err >&2)
-	NUMANODE=1 && numactl --cpunodebind=$NUMANODE --membind=$NUMANODE /usr/bin/time -v ./itdk_links.py --src-cloud gcloud --src-regions $SRC_REGION --dst-cloud gcloud --dst-regions $(echo "$GCP_REGIONS") 1> >(tee $HOSTNAME.numa$NUMANODE.routes.aws.$SRC_REGION.gcloud.all.by_ip) 2> >(tee $HOSTNAME.numa$NUMANODE.routes.aws.$SRC_REGION.gcloud.all.err >&2)
+for src_region in $(echo $AWS_REGIONS); do
+    run_single_src_region_to_entire_cloud 0 aws $src_region aws
+    run_single_src_region_to_entire_cloud 1 aws $src_region gcloud
 done
 
 # From gcloud
-for SRC_REGION in $(echo $GCP_REGIONS); do
-	NUMANODE=0 && numactl --cpunodebind=$NUMANODE --membind=$NUMANODE /usr/bin/time -v ./itdk_links.py --src-cloud gcloud --src-regions $SRC_REGION --dst-cloud aws --dst-regions $(echo "$AWS_REGIONS") 1> >(tee $HOSTNAME.numa$NUMANODE.routes.gcloud.$SRC_REGION.aws.all.by_ip) 2> >(tee $HOSTNAME.numa$NUMANODE.routes.gcloud.$SRC_REGION.aws.all.err >&2)
-	NUMANODE=1 && numactl --cpunodebind=$NUMANODE --membind=$NUMANODE /usr/bin/time -v ./itdk_links.py --src-cloud gcloud --src-regions $SRC_REGION --dst-cloud gcloud --dst-regions $(echo "$GCP_REGIONS") 1> >(tee $HOSTNAME.numa$NUMANODE.routes.gcloud.$SRC_REGION.gcloud.all.by_ip) 2> >(tee $HOSTNAME.numa$NUMANODE.routes.gcloud.$SRC_REGION.gcloud.all.err >&2)
+for src_region in $(echo $GCP_REGIONS); do
+    run_single_src_region_to_entire_cloud 0 gcloud $src_region aws
+    run_single_src_region_to_entire_cloud 1 gcloud $src_region gcloud
 done
