@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+import io
 import logging
+import os
+import sys
+from typing import Optional
 import pandas as pd
 
 from common import get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
@@ -34,10 +38,15 @@ def get_node_ids_with_geo_coordinates():
     node_geo_df = parse_node_geo_as_dataframe()
     return node_geo_df.index.tolist()
 
-def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
+def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_file: Optional[str]):
     logging.info('Converting routes from IPs to lat/lons ...')
     converted_routes = []
 
+    if output_file:
+        output = open(output_file, 'w')
+        logging.info(f'Writing (lat, lon) routes to {output_file} ...')
+    else:
+        output = None
     for ip_addresses in routes:
         # Convert each IP address to a node ID using the node_ip_to_id dictionary
         node_ids = [node_ip_to_id.get(ip, '') for ip in ip_addresses]
@@ -60,21 +69,28 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df):
             continue
 
         # Append the converted route to the result
-        print(coordinates)
+        print(coordinates, file=output if output else sys.stdout)
         converted_routes.append(coordinates)
+
+    if output:
+        output.close()
 
     logging.info('Done')
     return converted_routes
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--routes_file', type=str, help='The routes file, each line contains a list that represents a route.')
+    parser.add_argument('--routes_files', type=str, nargs='+', help='The routes file, each line contains a list that represents a route.')
     parser.add_argument('--convert-ip-to-latlon', action='store_true',
                         help='Convert the routes from IP addresses to lat/lon coordinates')
+    parser.add_argument('-o', '--outputs', type=str, nargs='*', help='The output file.')
     args = parser.parse_args()
 
-    if args.convert_ip_to_latlon and args.routes_file is None:
-        parser.error('routes_file must be specified when --convert-ip-to-latlon is specified')
+    if args.convert_ip_to_latlon and args.routes_files is None:
+        parser.error('routes_files must be specified when --convert-ip-to-latlon is specified')
+
+    if args.outputs is not None and len(args.outputs) not in [0, len(args.routes_files)]:
+        parser.error('The number of output files must match the number of routes files, or be 0 (auto-naming files)')
 
     return args
 
@@ -82,11 +98,20 @@ def main():
     init_logging()
     args = parse_args()
     if args.convert_ip_to_latlon:
-        routes = get_routes_from_file(args.routes_file)
         node_ip_to_id = load_itdk_node_ip_to_id_mapping()
         node_geo_df = parse_node_geo_as_dataframe()
-        routes_by_latlon = convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df)
-        # print(routes_by_latlon)
+        for i in range(len(args.routes_files)):
+            routes_file: str = args.routes_files[i]
+            if args.outputs is not None:
+                if len(args.outputs) == 0:
+                    output_file = os.path.basename(routes_file).removesuffix('.by_ip') + '.by_geo'
+                else:
+                    output_file = args.outputs[i]
+            else:
+                output_file = None
+            logging.info(f'Converting routes from {routes_file} to {output_file} ...')
+            routes = get_routes_from_file(routes_file)
+            convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_file)
     else:
         raise ValueError('No action specified')
 
