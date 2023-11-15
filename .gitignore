@@ -1,11 +1,13 @@
 /analysis/results/
-/analysis/carbon_cache/
-/analysis/!*.py
+/analysis/*_cache/
 /analysis/*route*
+!/analysis/*.py
 /analysis/*.txt
+/analysis/*.png
 /analysis/matched_nodes.*.txt
 /data/caida-itdk/data/
 /data/cloud/ip-prefixes/
+/data/cloud/traceroutes/
 
 
 # Byte-compiled / optimized / DLL files
