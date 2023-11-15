@@ -125,7 +125,7 @@ def plot_heatmap(src_regions: list[str], dst_regions: list[str], region_hop_coun
     plt.savefig(filename, bbox_inches='tight')
 
 def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[list[str]], Any],
-                                        metric: str, do_plot_pdf: bool):
+                                        metric: str, plot_pdfs: bool):
     # Dictionary to hold the source-destination pairs and the aggregated value
     weighted_average_by_region_pair = {}
 
@@ -154,7 +154,7 @@ def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[li
 
         weighted_average_by_region_pair[(src, dst)] = np.average(values, weights=weights).tolist()
 
-        if do_plot_pdf:
+        if plot_pdfs:
             plot_pdf(values, weights, src, dst, metric, DATA_SOURCE)
     return weighted_average_by_region_pair
 
@@ -163,12 +163,14 @@ def parse_args():
     parser.add_argument('--metrics', choices=['hopcount', 'distance'], required=True, nargs='+',
                         help='The metrics to plot')
     parser.add_argument('--dirpath', type=DirType, required=True, help='The directory that contains the routes files')
-    parser.add_argument('--plot-heatmap', action='store_true')
-    parser.add_argument('--plot-pdf', action='store_true')
+    parser.add_argument('--plot-heatmap', action='store_true',
+                        help='Plot the heatmap of the metric across all region pairs')
+    parser.add_argument('--plot-pdfs', action='store_true',
+                        help='Plot the PDFs of the metric, one graph for each region pair')
     args = parser.parse_args()
 
-    if not (args.plot_heatmap or args.plot_pdf):
-        parser.error('At least one of --plot-heatmap or --plot-pdf must be specified')
+    if not (args.plot_heatmap or args.plot_pdfs):
+        parser.error('At least one of --plot-heatmap or --plot-pdfs must be specified')
 
     return args
 
@@ -183,7 +185,7 @@ def main():
             process_hops = lambda x: calculate_total_distance(x.split('|'))
         else:
             raise NotImplementedError(f'Unknown metric: {metric}')
-        value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric, args.plot_pdf)
+        value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric, args.plot_pdfs)
         src_dst_pairs = value_by_region_pair.keys()
         src_regions = sorted(set(t[0] for t in src_dst_pairs))
         dst_regions = sorted(set(t[1] for t in src_dst_pairs))

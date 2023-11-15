@@ -90,6 +90,14 @@ mv routes.*.by_iso region_pair.by_iso/
 mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
 ```
 
+- (Optional) We can also plot the distribution of the routes statistics like `hopcount` and `distance` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
+```Shell
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics hopcount --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics hopcount --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance --dirpath ./region_pair.by_geo.distribution/
+```
+
 ### Traceroute from inside cloud regions
 
 Note that the CAIDA ITDK dataset is collected from public ARK probe endpoints, and thus may not observe the same set of routes as from inside the cloud. Thus, to improve the route accuracy, we can run `traceroute` directly from each cloud region, to all other cloud regions.
