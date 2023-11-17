@@ -1,6 +1,6 @@
-# CAIDA ITDK Analysis
+# Inter-cloud-region Route Analysis
 
-This directory holds the analysis script using the CAIDA ITDK dataset and public cloud IP range/prefix data.
+This directory holds the analysis script for inter-cloud-region routes, using primarily the CAIDA ITDK dataset, together with public cloud IP range/prefix data. You can find more details about these dataset in the [data](../data/) directory.
 
 ## Usage
 
@@ -86,6 +86,15 @@ mv routes.*.by_geo.distribution region_pair.by_geo.distribution/
 mv routes.*.by_iso region_pair.by_iso/
 mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
 ```
+
+### Traceroute from inside cloud regions
+
+Note that the CAIDA ITDK dataset is collected from public ARK probe endpoints, and thus may not observe the same set of routes as from inside the cloud. Thus, to improve the route accuracy, we can run `traceroute` directly from each cloud region, to all other cloud regions.
+
+In order to run traceroute, we need to get a list of responsive hosts inside each region. We can get this by sending ICMP echo requests to each host inside that region based on the [IP ranges](../data/) list. Since they are very large (a few dozens per region, each up to /15 prefix), we use [zmap](https://github.com/zmap/zmap) to run ICMP echo ping in parallel, and limit the results to about 1000 per region.
+
+Given the IP ranges/prefixes list, we can generate the per-region input file and run `zmap` using this script: `scan_ip_prefix.sh`.
+Note that `zmap` randomly orders and samples from the entire input IP space. We can verify the output distribution using `scan_ip_distribution.py`.
 
 ## Clean up noisy routes
 

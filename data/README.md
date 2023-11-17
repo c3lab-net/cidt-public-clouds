@@ -2,7 +2,12 @@
 
 ### [CAIDA ITDK](./caida-itdk/)
 
-This is the ITDK dataset from 2022-03 release. More info can be found in the [caida-itdk](./caida-itdk/) directory.
+[Macroscopic Internet Topology Data Kit (ITDK)](https://www.caida.org/catalog/datasets/internet-topology-data-kit/)
+> The ITDK contains data about connectivity and routing gathered from a large cross-section of the global Internet. This dataset is useful for studying the topology of the Internet at the router-level, among other uses.
+
+We use this dataset to reconstruct the Internet router connectivity graph and from there, infer the inter-cloud paths based on the IP prefixes of each cloud region (see next section).
+
+The ITDK dataset we use is from the 2022-03 release. More info on this dataset can be found in the [caida-itdk](./caida-itdk/) directory.
 
 ### [Public cloud info](./cloud/)
 
