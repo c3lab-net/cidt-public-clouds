@@ -51,6 +51,7 @@ def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]], out
             route_in_carbon_region.append(carbon_region)
         routes_in_carbon_region.append(route_in_carbon_region)
         print(route_in_carbon_region, file=output if output else sys.stdout)
+    logging.info('Done')
     return routes_in_carbon_region
 
 def load_region_to_iso_groud_truth(iso_ground_truth_csv: str):
@@ -63,10 +64,19 @@ def filter_iso_by_ground_truth(routes: list[list], src_cloud: str, dst_cloud: st
                                src_region: str, dst_region: str,
                                iso_ground_truth: dict[str, str]) -> list[list]:
     """Filter the routes by ground truth ISOs of the src and dst regions, aka the first and last hop."""
-    logging.info('Filtering ISO by ground truth ...')
+    src = f'{src_cloud}:{src_region}'
+    dst = f'{dst_cloud}:{dst_region}'
 
-    src_iso = iso_ground_truth[f'{src_cloud}:{src_region}']
-    dst_iso = iso_ground_truth[f'{dst_cloud}:{dst_region}']
+    try:
+        src_iso = iso_ground_truth[src]
+        dst_iso = iso_ground_truth[dst]
+    except KeyError as ex:
+        logging.error(f'KeyError: {ex}')
+        logging.error(traceback.format_exc())
+        raise ValueError(f'Region not found in ground truth CSV: {ex}')
+
+    logging.info('Filtering routes based on ground truth ISOs of src and dst ...')
+    logging.info(f'Ground truth: src: {src} -> {src_iso}, dst: {dst} -> {dst_iso}')
 
     filtered_routes = []
     for route in routes:
@@ -82,6 +92,8 @@ def export_routes_distribution(routes: list[list], output: Optional[io.TextIOWra
     routes_as_str = [ '|'.join([str(e) for e in route]) for route in routes ]
     for route_str, count in sorted(Counter(routes_as_str).items(), key=lambda x: x[1], reverse=True):
         print(count, route_str, file=output if output else sys.stdout)
+
+    logging.info('Done')
 
 def parse_args():
     parser = argparse.ArgumentParser()

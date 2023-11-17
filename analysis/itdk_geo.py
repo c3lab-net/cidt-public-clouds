@@ -177,7 +177,7 @@ def main():
                     output_file = args.outputs[i]
             else:
                 output_file = None
-            logging.info(f'Converting routes from {routes_file} to {output_file} ...')
+            logging.info(f'Converting routes from {routes_file} to {output_file if output_file else "stdout"} ...')
             routes = get_routes_from_file(routes_file)
             convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
                                              check_route_by_ground_truth,
