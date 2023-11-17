@@ -54,8 +54,8 @@ def convert_latlon_to_carbon_region(routes: list[list[tuple[float, float]]], out
     logging.info('Done')
     return routes_in_carbon_region
 
-def load_region_to_iso_groud_truth(iso_ground_truth_csv: str):
-    with open(iso_ground_truth_csv, 'r') as f:
+def load_region_to_iso_groud_truth(iso_ground_truth_csv: io.TextIOWrapper):
+    with iso_ground_truth_csv as f:
         csv_reader = csv.DictReader(f)
         d_region_to_iso = { f"{row['cloud']}:{row['region']}": row['iso'] for row in csv_reader }
     return d_region_to_iso
@@ -104,7 +104,8 @@ def parse_args():
     parser.add_argument('--export-routes-distribution', action='store_true',
                         help='Export the routes distribution.')
     parser.add_argument('--filter-iso-by-ground-truth', action='store_true', help='Filter the routes by ground truth ISOs.')
-    parser.add_argument('--iso-ground-truth-csv', type=str, help='The CSV file containing the ground truth ISOs.')
+    parser.add_argument('--iso-ground-truth-csv', type=argparse.FileType('r'),
+                        help='The CSV file containing the ground truth ISOs.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
     parser.add_argument('--src-region', required=False, help='The source region')

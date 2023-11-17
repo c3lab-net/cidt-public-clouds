@@ -86,8 +86,8 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
     logging.info('Converted/Total: %d/%d', len(converted_routes), len(routes))
     return converted_routes
 
-def load_region_to_geo_coordinate_ground_truth(geo_coordinate_ground_truth_csv: str):
-    with open(geo_coordinate_ground_truth_csv, 'r') as f:
+def load_region_to_geo_coordinate_ground_truth(geo_coordinate_ground_truth_csv: io.TextIOWrapper):
+    with geo_coordinate_ground_truth_csv as f:
         csv_reader = csv.DictReader(f)
         d_region_to_coordinate = {}
         for row in csv_reader:
@@ -123,7 +123,7 @@ def parse_args():
     parser.add_argument('-o', '--outputs', type=str, nargs='*', help='The output file.')
     parser.add_argument('--filter-geo-coordinate-by-ground-truth', action='store_true',
                         help='Filter the routes by ground truth geo coordinates.')
-    parser.add_argument('--geo-coordinate-ground-truth-csv', type=str,
+    parser.add_argument('--geo-coordinate-ground-truth-csv', type=argparse.FileType('r'),
                         help='The CSV file containing the ground truth geo coordinates.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
