@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
+import csv
 import io
 import logging
 import os
 import sys
-from typing import Optional
+import traceback
+from typing import Callable, Optional
 import pandas as pd
 
 from common import get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
@@ -38,8 +40,10 @@ def get_node_ids_with_geo_coordinates():
     node_geo_df = parse_node_geo_as_dataframe()
     return node_geo_df.index.tolist()
 
-def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_file: Optional[str]):
-    logging.info('Converting routes from IPs to lat/lons ...')
+def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
+                                     is_valid_route: Callable[[list[tuple[float, float]]], bool],
+                                     output_file: Optional[str]):
+    logging.info('Converting valid routes from IPs to lat/lons ...')
     converted_routes = []
 
     if output_file:
@@ -57,15 +61,19 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_
             if not node_id:
                 logging.warning(f'Ignoring unknown node with ip {ip_addresses}')
                 continue
-            # _debug_
             if node_id not in node_geo_df.index:
                 logging.error(f'Node ID {node_id} not found in node_geo_df')
                 coordinates = []
                 break
             row = node_geo_df.loc[node_id]
             coordinates.append((row['lat'], row['long']))
-        # _debug_
-        if coordinates == []:
+        # Route must have at least 2 hops, at src and dst.
+        if len(coordinates) < 2:
+            logging.warning(f'Ignoring route with less than 2 hops: {ip_addresses}')
+            continue
+
+        # Check if the route is valid
+        if not is_valid_route(coordinates):
             continue
 
         # Append the converted route to the result
@@ -75,8 +83,37 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_
     if output:
         output.close()
 
-    logging.info('Done')
+    logging.info('Converted/Total: %d/%d', len(converted_routes), len(routes))
     return converted_routes
+
+def load_region_to_geo_coordinate_ground_truth(geo_coordinate_ground_truth_csv: str):
+    with open(geo_coordinate_ground_truth_csv, 'r') as f:
+        csv_reader = csv.DictReader(f)
+        d_region_to_coordinate = {}
+        for row in csv_reader:
+            region_key = f"{row['cloud']}:{row['region']}"
+            coordinates = (float(row['latitude']), float(row['longitude']))
+            d_region_to_coordinate[region_key] = coordinates
+    return d_region_to_coordinate
+
+def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[str, tuple[float, float]],
+                                             src_cloud: str, src_region: str,
+                                             dst_cloud: str, dst_region: str) -> \
+                                                Callable[[list[tuple[float, float]]], bool]:
+        src = f'{src_cloud}:{src_region}'
+        dst = f'{dst_cloud}:{dst_region}'
+        try:
+            src_coordinate = geo_coordinate_ground_truth[src]
+            dst_coordinate = geo_coordinate_ground_truth[dst]
+        except KeyError as ex:
+            logging.error(f'KeyError: {ex}')
+            logging.error(traceback.format_exc())
+            raise ValueError(f'Region not found in ground truth CSV: {ex}')
+
+        logging.info('Filtering routes based on ground truth geo coordinates of src and dst ...')
+        logging.info(f'Ground truth: src: {src} -> {src_coordinate}, dst: {dst} -> {dst_coordinate}')
+        check_route_by_ground_truth = lambda route: route[0] == src_coordinate and route[-1] == dst_coordinate
+        return check_route_by_ground_truth
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -84,13 +121,36 @@ def parse_args():
     parser.add_argument('--convert-ip-to-latlon', action='store_true',
                         help='Convert the routes from IP addresses to lat/lon coordinates')
     parser.add_argument('-o', '--outputs', type=str, nargs='*', help='The output file.')
+    parser.add_argument('--filter-geo-coordinate-by-ground-truth', action='store_true',
+                        help='Filter the routes by ground truth geo coordinates.')
+    parser.add_argument('--geo-coordinate-ground-truth-csv', type=str,
+                        help='The CSV file containing the ground truth geo coordinates.')
+    parser.add_argument('--src-cloud', required=False, help='The source cloud')
+    parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
+    parser.add_argument('--src-region', required=False, help='The source region')
+    parser.add_argument('--dst-region', required=False, help='The destination region')
     args = parser.parse_args()
+
+    if not args.convert_ip_to_latlon:
+        parser.error('No action specified. Please specify --convert-ip-to-latlon')
 
     if args.convert_ip_to_latlon and args.routes_files is None:
         parser.error('routes_files must be specified when --convert-ip-to-latlon is specified')
 
     if args.outputs is not None and len(args.outputs) not in [0, len(args.routes_files)]:
         parser.error('The number of output files must match the number of routes files, or be 0 (auto-naming files)')
+
+    if args.filter_geo_coordinate_by_ground_truth:
+        if not args.geo_coordinate_ground_truth_csv:
+            parser.error('--geo-coordinate-ground-truth-csv must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+        if not args.src_cloud:
+            parser.error('--src-cloud must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+        if not args.dst_cloud:
+            parser.error('--dst-cloud must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+        if not args.src_region:
+            parser.error('--src-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+        if not args.dst_region:
+            parser.error('--dst-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
 
     return args
 
@@ -100,6 +160,14 @@ def main():
     if args.convert_ip_to_latlon:
         node_ip_to_id = load_itdk_node_ip_to_id_mapping()
         node_geo_df = parse_node_geo_as_dataframe()
+        check_route_by_ground_truth = lambda _: True
+        if args.filter_geo_coordinate_by_ground_truth:
+            geo_coordinate_ground_truth = \
+                load_region_to_geo_coordinate_ground_truth(args.geo_coordinate_ground_truth_csv)
+            check_route_by_ground_truth = \
+                get_route_check_function_by_ground_truth(geo_coordinate_ground_truth,
+                                                         args.src_cloud, args.src_region,
+                                                         args.dst_cloud, args.dst_region)
         for i in range(len(args.routes_files)):
             routes_file: str = args.routes_files[i]
             if args.outputs is not None:
@@ -111,7 +179,9 @@ def main():
                 output_file = None
             logging.info(f'Converting routes from {routes_file} to {output_file} ...')
             routes = get_routes_from_file(routes_file)
-            convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df, output_file)
+            convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
+                                             check_route_by_ground_truth,
+                                             output_file)
     else:
         raise ValueError('No action specified')
 
