@@ -98,20 +98,32 @@ Note that `zmap` randomly orders and samples from the entire input IP space. We 
 
 ## Clean up noisy routes
 
-Due to inaccurate IP ranges or geolocation lookup, there can be routes that don't conform to the rough geographical regions, or carbon regions.
+Due to inaccurate IP ranges or geolocation lookup, there can be routes that don't conform to the rough geographical regions, or carbon regions / ISOs.
+
+### By ISO
+
 To get around this problem, we can get the ISO distribution for each cloud region, and manually pick the "correct" one by checking the map and (most of the time) picking the majority.
 ```Shell
 ./cloud_region_distribution.py --cloud aws --of-iso > iso_distribution.aws.txt
+./cloud_region_distribution.py --cloud gcloud --of-iso > iso_distribution.gcloud.txt
 ```
 
-(Optional) We can also get a distribution of the geo-coordinates of each region based on the matched IPs, and manually inspect the result to get the location in city/state/country.
-```Shell
-./cloud_region_distribution.py --cloud aws --of-coordinate > gps_distribution.aws.txt
-```
-
-After manual inspection, we can save the result in [CSV files](./results/iso_distributions/) and later use this information to prune the routes (by the correct src/dst ISOs).
+After manual inspection, we can save the result in a [CSV file](./results/iso_distributions/iso_distribution.all.csv) and later use this information to prune the routes (by the correct src/dst ISO of the respective region).
 ```Shell
 ./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
+```
+
+### By geo-coordinate
+
+Similarly, we can also get a distribution of the geo-coordinates of each region based on the matched IPs, and manually inspect the result to get the latitude/longitude similar to the above ISO distributions.
+```Shell
+./cloud_region_distribution.py --cloud aws --of-coordinate > gps_distribution.aws.txt
+./cloud_region_distribution.py --cloud gcloud --of-coordinate > gps_distribution.gcloud.txt
+```
+
+Again, we can save the result in a [CSV file](./results/geo_distributions/geo_distribution.all.csv) and later use this information as a ground truth to prune the routes (by the correct src/dst geo coordinate of the respective region).
+```Shell
+./itdk_geo.py --convert-ip-to-latlon --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_ip 1> routes.aws.us-west-1.us-east-1.by_geo
 ```
 
 ## (Optional) Utility scripts
