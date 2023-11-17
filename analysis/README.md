@@ -63,9 +63,10 @@ This will put the existing files in a sub-directory called `rawdata` and store a
 
 Afterwards, we can run IP-to-geo-coordinate, geo-coordinate-to-ISO and ISO distribution steps in parallel.
 Note that IP-to-geo script accepts multiple input files, due to its overhead of loading the GEO dataset. The other two scripts can be easily ran in a for loop.
+Also see the below section ("Clean up noisy routes") for details on filtering by ground truth.
 ```Shell
 set -e
-./itdk_geo.py --convert-ip-to-latlon --routes_file region_pair.by_ip/routes.*.by_ip --outputs
+./itdk_geo.py --convert-ip-to-latlon --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --routes_file region_pair.by_ip/routes.*.by_ip --outputs
 chmod 440 routes.*.by_geo
 for file in routes.*.by_geo; do
     echo "Processing $file ..."

@@ -10,7 +10,7 @@ import traceback
 from typing import Callable, Optional
 import pandas as pd
 
-from common import get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
+from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo'):
     logging.info(f'Loading node geo entries from {node_geo_filename} ...')
@@ -143,14 +143,25 @@ def parse_args():
     if args.filter_geo_coordinate_by_ground_truth:
         if not args.geo_coordinate_ground_truth_csv:
             parser.error('--geo-coordinate-ground-truth-csv must be specified when --filter-geo-coordinate-by-ground-truth is specified')
-        if not args.src_cloud:
-            parser.error('--src-cloud must be specified when --filter-geo-coordinate-by-ground-truth is specified')
-        if not args.dst_cloud:
-            parser.error('--dst-cloud must be specified when --filter-geo-coordinate-by-ground-truth is specified')
-        if not args.src_region:
-            parser.error('--src-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
-        if not args.dst_region:
-            parser.error('--dst-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+        args.cloud_region_pair_by_filename = {}
+        if not args.src_cloud and not args.dst_cloud and not args.src_region and not args.dst_region:
+            # Check if we can auto-detect the src and dst cloud/region from the routes files
+            for routes_file in args.routes_files:
+                cloud_regions = detect_cloud_regions_from_filename(routes_file)
+                if cloud_regions is None:
+                    parser.error('Cannot auto-detect cloud regions from the filename "%s"' % routes_file)
+                else:
+                    logging.info(f'Auto-detected cloud regions from filename "{routes_file}": {cloud_regions}')
+                    args.cloud_region_pair_by_filename[routes_file] = cloud_regions
+        else:
+            if not args.src_cloud:
+                parser.error('--src-cloud must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+            if not args.dst_cloud:
+                parser.error('--dst-cloud must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+            if not args.src_region:
+                parser.error('--src-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+            if not args.dst_region:
+                parser.error('--dst-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
 
     return args
 
@@ -160,16 +171,12 @@ def main():
     if args.convert_ip_to_latlon:
         node_ip_to_id = load_itdk_node_ip_to_id_mapping()
         node_geo_df = parse_node_geo_as_dataframe()
-        check_route_by_ground_truth = lambda _: True
-        if args.filter_geo_coordinate_by_ground_truth:
-            geo_coordinate_ground_truth = \
-                load_region_to_geo_coordinate_ground_truth(args.geo_coordinate_ground_truth_csv)
-            check_route_by_ground_truth = \
-                get_route_check_function_by_ground_truth(geo_coordinate_ground_truth,
-                                                         args.src_cloud, args.src_region,
-                                                         args.dst_cloud, args.dst_region)
+        geo_coordinate_ground_truth = \
+            load_region_to_geo_coordinate_ground_truth(args.geo_coordinate_ground_truth_csv) \
+            if args.filter_geo_coordinate_by_ground_truth else {}
         for i in range(len(args.routes_files)):
             routes_file: str = args.routes_files[i]
+            # Auto-name output_file
             if args.outputs is not None:
                 if len(args.outputs) == 0:
                     output_file = os.path.basename(routes_file).removesuffix('.by_ip') + '.by_geo'
@@ -177,6 +184,20 @@ def main():
                     output_file = args.outputs[i]
             else:
                 output_file = None
+            # Generate check route function
+            if args.filter_geo_coordinate_by_ground_truth:
+                if routes_file in args.cloud_region_pair_by_filename:
+                    (src_cloud, src_region, dst_cloud, dst_region) = args.cloud_region_pair_by_filename[routes_file]
+                else:
+                    (src_cloud, src_region) = (args.src_cloud, args.src_region)
+                    (dst_cloud, dst_region) = (args.dst_cloud, args.dst_region)
+                check_route_by_ground_truth = \
+                    get_route_check_function_by_ground_truth(geo_coordinate_ground_truth,
+                                                            src_cloud, src_region,
+                                                            dst_cloud, dst_region)
+            else:
+                check_route_by_ground_truth = lambda _: True
+            # Convert routes
             logging.info(f'Converting routes from {routes_file} to {output_file if output_file else "stdout"} ...')
             routes = get_routes_from_file(routes_file)
             convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,

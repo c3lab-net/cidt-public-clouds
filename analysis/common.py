@@ -2,6 +2,7 @@
 
 import ast
 import json
+import re
 import sys
 import time
 import logging
@@ -97,3 +98,21 @@ def get_routes_from_file(filename) -> list[list]:
     with open(filename, 'r') as file:
         lines = file.readlines()
         return [ ast.literal_eval(line) for line in lines ]
+
+def detect_cloud_regions_from_filename(filename: str):
+    """Parse the filename and return a 4-item tuple (src_cloud, src_region, dst_cloud, dst_region)."""
+    # filename example: routes.aws.af-south-1.aws.ap-northeast-1.by_geo
+    regex_4_tuple = re.compile(r'.*\.(aws|gcloud|gcp)\.([\w-]+)\.(aws|gcloud|gcp)\.([\w-]+)\.by_.*')
+    m = regex_4_tuple.match(filename)
+    if m:
+        return m.groups()
+    # filename example: routes.aws.af-south-1.ap-northeast-1.by_geo
+    # Assume both regions belong to the same cloud if the filename does not contain a second cloud name
+    regex_3_tuple = re.compile(r'.*\.(aws|gcloud|gcp)\.([\w-]+)\.([\w-]+)\.by_.*')
+    m = regex_3_tuple.match(filename)
+    if m:
+        (src_cloud, src_region, dst_region) = m.groups()
+        dst_cloud = src_cloud
+        return (src_cloud, src_region, dst_cloud, dst_region)
+    # Cannot match with any regex
+    return None
