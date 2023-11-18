@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import functools
 import io
 import logging
 import os
@@ -11,6 +12,7 @@ from typing import Callable, Optional
 import pandas as pd
 
 from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
+from carbon_client import get_carbon_region_from_coordinate
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo'):
     logging.info(f'Loading node geo entries from {node_geo_filename} ...')
@@ -105,14 +107,26 @@ def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[s
         try:
             src_coordinate = geo_coordinate_ground_truth[src]
             dst_coordinate = geo_coordinate_ground_truth[dst]
+            src_iso = get_carbon_region_from_coordinate(src_coordinate)
+            dst_iso = get_carbon_region_from_coordinate(dst_coordinate)
         except KeyError as ex:
             logging.error(f'KeyError: {ex}')
             logging.error(traceback.format_exc())
             raise ValueError(f'Region not found in ground truth CSV: {ex}')
 
-        logging.info('Filtering routes based on ground truth geo coordinates of src and dst ...')
-        logging.info(f'Ground truth: src: {src} -> {src_coordinate}, dst: {dst} -> {dst_coordinate}')
-        check_route_by_ground_truth = lambda route: route[0] == src_coordinate and route[-1] == dst_coordinate
+        logging.info('Filtering routes based on ground truth geo coordinates of src and dst, converted to ISOs ...')
+        logging.info(f'Ground truth: src: {src} -> {src_iso}, dst: {dst} -> {dst_iso}')
+        @functools.cache
+        def are_isos_equal(coord1: tuple[float, float], coord2: tuple[float, float]):
+            # (lat1, lon1) = gps1.split(',', 1)
+            # (lat2, lon2) = gps2.split(',', 1)
+            # coord1 = (float(lat1), float(lon1))
+            # coord2 = (float(lat2), float(lon2))
+            iso1 = get_carbon_region_from_coordinate(coord1)
+            logging.debug(f'ISO mapping: {coord1} -> {iso1}')
+            return iso1 == get_carbon_region_from_coordinate(coord2)
+
+        check_route_by_ground_truth = lambda route: are_isos_equal(route[0], src_coordinate) and are_isos_equal(route[-1], dst_coordinate)
         return check_route_by_ground_truth
 
 def parse_args():
@@ -166,7 +180,7 @@ def parse_args():
     return args
 
 def main():
-    init_logging()
+    init_logging(level=logging.INFO)
     args = parse_args()
     if args.convert_ip_to_latlon:
         node_ip_to_id = load_itdk_node_ip_to_id_mapping()

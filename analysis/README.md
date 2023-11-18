@@ -77,7 +77,9 @@ for file in routes.*.by_geo; do
     src_region="$(echo "$name" | awk -F. '{print $3}')"
     dst_cloud="$(echo "$name" | awk -F. '{print $4}')"
     dst_region="$(echo "$name" | awk -F. '{print $5}')"
-    ./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud "$src_cloud" --src-region "$src_region" --dst-cloud "$dst_cloud" --dst-region "$dst_region" --routes_file "$name.by_iso" > "$name.by_iso.distribution"
+    ./carbon_client.py --export-routes-distribution --routes_file "$name.by_iso" > "$name.by_iso.distribution"
+    # It is not necessary to filter again as we've filtered earlier. See notes at the end of "Clean up noisy routes" section.
+    # ./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud "$src_cloud" --src-region "$src_region" --dst-cloud "$dst_cloud" --dst-region "$dst_region" --routes_file "$name.by_iso" > "$name.by_iso.distribution"
     chmod 440 "$name.by_geo.distribution" $name.by_iso $name.by_iso.distribution
 done
 
@@ -122,10 +124,12 @@ Similarly, we can also get a distribution of the geo-coordinates of each region 
 ./cloud_region_distribution.py --cloud gcloud --of-coordinate > gps_distribution.gcloud.txt
 ```
 
-Again, we can save the result in a [CSV file](./results/geo_distributions/geo_distribution.all.csv) and later use this information as a ground truth to prune the routes (by the correct src/dst geo coordinate of the respective region).
+Again, we can save the result in a [CSV file](./results/geo_distributions/geo_distribution.all.csv) and later use this information as a ground truth to prune the routes (by the correct src/dst *ISO based on the geo coordinate* of the respective region, this is because coordinate equality check is too strict).
 ```Shell
 ./itdk_geo.py --convert-ip-to-latlon --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_ip 1> routes.aws.us-west-1.us-east-1.by_geo
 ```
+
+Note that when we filter at the geo-coordinate stage, we no longer need to filter again at the ISO stage, as both are comparing the ISOs of the first and last hop of a route with the source and destination ISOs. Hence the omission in the earlier batch execution script.
 
 ## (Optional) Utility scripts
 When splitting calculation among multiple nodes, sometimes it's desireable to split a single region into multiple parts, as different region has different number of IPs.
