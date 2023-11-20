@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from geopy.distance import geodesic
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from common import DirType, init_logging
 
@@ -67,9 +67,9 @@ def get_hops_and_weights(file_path: str) -> tuple[np.ndarray, np.ndarray]:
     weights = data['weight'].to_numpy()
     return hops, weights
 
-def extract_regions_from_filename(filename):
+def extract_cloud_regions_from_filename(filename) -> tuple[tuple[str, str], tuple[str, str]]:
     """
-    Extract the source and destination regions from the given filename.
+    Extract the source and destination (cloud, region) pairs from the given filename.
     Assumes the format: 'routes.[src].[dst].by_iso.distribution'
     """
     regex = re.compile(r'^routes\.([a-z0-9-]+)\.([a-z0-9-]+)\.([a-z0-9-]+)\.([a-z0-9-]+)\.by_(?:\w+)\.distribution$')
@@ -79,9 +79,7 @@ def extract_regions_from_filename(filename):
     src_region = m.group(2)
     dst_cloud = m.group(3)
     dst_region = m.group(4)
-    src = f'{src_cloud}:{src_region}'
-    dst = f'{dst_cloud}:{dst_region}'
-    return src, dst
+    return (src_cloud, src_region), (dst_cloud, dst_region)
 
 def plot_pdf(values, weights, src_region: str, dst_region: str, metric: str, data_source: str):
     # Normalize the weights to ensure they sum up to 1
@@ -125,20 +123,20 @@ def plot_heatmap(src_regions: list[str], dst_regions: list[str], region_hop_coun
     plt.savefig(filename, bbox_inches='tight')
 
 def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[list[str]], Any],
-                                        metric: str, plot_pdfs: bool):
+                                        metric: str, plot_pdfs: bool,
+                                        src_cloud: Optional[str], src_region: Optional[str],
+                                        dst_cloud: Optional[str], dst_region: Optional[str]):
     # Dictionary to hold the source-destination pairs and the aggregated value
     weighted_average_by_region_pair = {}
 
     # Corrected processing of each file
     for file in os.listdir(dirpath):
         file_path = os.path.join(dirpath, file)
-        src, dst = extract_regions_from_filename(file)
+        src, dst = extract_cloud_regions_from_filename(file)
 
-        # optional filtering on regions
-        # if not dst.startswith('aws:'):
-        #     continue
-        # if src != 'aws:us-west-1' or dst != 'aws:us-east-1':
-        #     continue
+        if (src_cloud and src_cloud != src[0]) or (src_region and src_region != src[1]) or \
+              (dst_cloud and dst_cloud != dst[0]) or (dst_region and dst_region != dst[1]):
+            continue
 
         logging.info('Processing file: %s', file_path)
 
@@ -152,6 +150,8 @@ def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[li
             if values[i] == 0.:
                 weights[i] = 0.
 
+        src = ':'.join(src)
+        dst = ':'.join(dst)
         weighted_average_by_region_pair[(src, dst)] = np.average(values, weights=weights).tolist()
 
         if plot_pdfs:
@@ -167,10 +167,20 @@ def parse_args():
                         help='Plot the heatmap of the metric across all region pairs')
     parser.add_argument('--plot-pdfs', action='store_true',
                         help='Plot the PDFs of the metric, one graph for each region pair')
+    parser.add_argument('--src-cloud', required=False, help='The source cloud to filter on')
+    parser.add_argument('--dst-cloud', required=False, help='The destination cloud to filter on')
+    parser.add_argument('--src-region', required=False, help='The source region to filter on')
+    parser.add_argument('--dst-region', required=False, help='The destination region to filter on')
     args = parser.parse_args()
 
     if not (args.plot_heatmap or args.plot_pdfs):
         parser.error('At least one of --plot-heatmap or --plot-pdfs must be specified')
+
+    if args.src_region and not args.src_cloud:
+        parser.error('--src-cloud must be specified with --src-region')
+
+    if args.dst_region and not args.dst_cloud:
+        parser.error('--dst-cloud must be specified with --dst-region')
 
     return args
 
@@ -185,7 +195,9 @@ def main():
             process_hops = lambda x: calculate_total_distance(x.split('|'))
         else:
             raise NotImplementedError(f'Unknown metric: {metric}')
-        value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric, args.plot_pdfs)
+        value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric, args.plot_pdfs,
+                                                                   args.src_cloud, args.src_region,
+                                                                   args.dst_cloud, args.dst_region)
         src_dst_pairs = value_by_region_pair.keys()
         src_regions = sorted(set(t[0] for t in src_dst_pairs))
         dst_regions = sorted(set(t[1] for t in src_dst_pairs))
