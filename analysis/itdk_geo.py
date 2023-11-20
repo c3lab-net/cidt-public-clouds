@@ -14,7 +14,11 @@ import pandas as pd
 from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
 from carbon_client import get_carbon_region_from_coordinate
 
-def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo'):
+Coordinate = tuple[float, float]
+RouteInCoordinate = list[Coordinate]
+RouteInIP = list[str]
+
+def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo') -> pd.DataFrame:
     logging.info(f'Loading node geo entries from {node_geo_filename} ...')
     columns = ['node_id', 'continent', 'country', 'region', 'city', 'lat', 'long', 'pop', 'IX', 'source']
     column_dtypes = {
@@ -38,15 +42,17 @@ def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.
     logging.info(f'Loaded {len(node_geo_df)} entries from {node_geo_filename}.')
     return node_geo_df
 
-def get_node_ids_with_geo_coordinates():
+def get_node_ids_with_geo_coordinates() -> list[str]:
     node_geo_df = parse_node_geo_as_dataframe()
     return node_geo_df.index.tolist()
 
-def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
-                                     is_valid_route: Callable[[list[tuple[float, float]]], bool],
-                                     output_file: Optional[str]):
+def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
+                                     node_ip_to_id: dict[str, str],
+                                     node_geo_df: pd.DataFrame,
+                                     is_valid_route: Callable[[RouteInCoordinate], bool],
+                                     output_file: Optional[str]) -> list[RouteInCoordinate]:
     logging.info('Converting valid routes from IPs to lat/lons ...')
-    converted_routes = []
+    converted_routes: list[RouteInCoordinate] = []
 
     if output_file:
         output = open(output_file, 'w')
@@ -58,7 +64,7 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
         node_ids = [node_ip_to_id.get(ip, '') for ip in ip_addresses]
 
         # Convert node IDs to latitude and longitude using the node_geo_df dictionary
-        coordinates = []
+        coordinates: list[Coordinate] = []
         for node_id in node_ids:
             if not node_id:
                 logging.warning(f'Ignoring unknown node with ip {ip_addresses}')
@@ -88,20 +94,21 @@ def convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
     logging.info('Converted/Total: %d/%d', len(converted_routes), len(routes))
     return converted_routes
 
-def load_region_to_geo_coordinate_ground_truth(geo_coordinate_ground_truth_csv: io.TextIOWrapper):
+def load_region_to_geo_coordinate_ground_truth(geo_coordinate_ground_truth_csv: io.TextIOWrapper) -> \
+                                                dict[str, Coordinate]:
     with geo_coordinate_ground_truth_csv as f:
         csv_reader = csv.DictReader(f)
-        d_region_to_coordinate = {}
+        d_region_to_coordinate: dict[str, Coordinate] = {}
         for row in csv_reader:
             region_key = f"{row['cloud']}:{row['region']}"
             coordinates = (float(row['latitude']), float(row['longitude']))
             d_region_to_coordinate[region_key] = coordinates
     return d_region_to_coordinate
 
-def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[str, tuple[float, float]],
+def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[str, Coordinate],
                                              src_cloud: str, src_region: str,
                                              dst_cloud: str, dst_region: str) -> \
-                                                Callable[[list[tuple[float, float]]], bool]:
+                                                Callable[[RouteInCoordinate], bool]:
         src = f'{src_cloud}:{src_region}'
         dst = f'{dst_cloud}:{dst_region}'
         try:
@@ -117,7 +124,7 @@ def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[s
         logging.info('Filtering routes based on ground truth geo coordinates of src and dst, converted to ISOs ...')
         logging.info(f'Ground truth: src: {src} -> {src_iso}, dst: {dst} -> {dst_iso}')
         @functools.cache
-        def are_isos_equal(coord1: tuple[float, float], coord2: tuple[float, float]):
+        def are_isos_equal(coord1: Coordinate, coord2: Coordinate):
             # (lat1, lon1) = gps1.split(',', 1)
             # (lat2, lon2) = gps2.split(',', 1)
             # coord1 = (float(lat1), float(lon1))
