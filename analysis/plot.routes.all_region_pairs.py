@@ -85,6 +85,7 @@ def plot_pdf(values, weights, src_region: str, dst_region: str, metric: str, dat
     # Normalize the weights to ensure they sum up to 1
     weights = np.array(weights) / np.sum(weights)
 
+    plt.figure()
     plt.hist(values, bins=len(values), weights=weights, density=True, edgecolor='black')
     plt.xlabel('Values')
     plt.ylabel('Probability')
