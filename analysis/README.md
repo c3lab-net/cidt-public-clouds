@@ -32,7 +32,7 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - (Optional) We can visualize the routes using the plot script:
 ```Shell
-./plot.routes.distribution.py --routes_file routes.aws.us-west-1.us-east-1.by_geo
+./plot.routes.single_region_pair.py --routes_file routes.aws.us-west-1.us-east-1.by_geo
 ```
 
 - Now with the routes in `(lat,lon)-coordinate` format, we can look up the carbon region or ISO (independent system operator) information with our carbon API.
@@ -88,6 +88,15 @@ mv routes.*.by_geo region_pair.by_geo/
 mv routes.*.by_geo.distribution region_pair.by_geo.distribution/
 mv routes.*.by_iso region_pair.by_iso/
 mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
+```
+
+- (Optional) We can also plot the distribution of the routes statistics like `hopcount` and `distance` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
+```Shell
+# Optionally, filter by adding --src-cloud aws/gcloud --dst-cloud aws/gcloud, or also by regions: --src-region ... --dst-region ...
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics hopcount --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics hopcount --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
 ```
 
 ### Traceroute from inside cloud regions

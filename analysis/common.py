@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+import argparse
 import ast
 import json
+import os
 import re
 import sys
 import time
@@ -116,3 +118,9 @@ def detect_cloud_regions_from_filename(filename: str):
         return (src_cloud, src_region, dst_cloud, dst_region)
     # Cannot match with any regex
     return None
+
+def DirType(path: str):
+    if os.path.isdir(path):
+        return path
+    else:
+        raise argparse.ArgumentTypeError(f'{path} is not a valid directory path')
