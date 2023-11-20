@@ -24,7 +24,6 @@ aws,us-gov-east-1,emap:US-MIDA-PJM
 aws,us-gov-west-1,emap:US-NW-PACW
 aws,us-west-1,emap:US-CAL-CISO
 aws,us-west-2,emap:US-NW-PACW
-cloud,region,iso
 gcloud,africa-south1,
 gcloud,asia-east1,emap:TW
 gcloud,asia-east2,emap:HK
