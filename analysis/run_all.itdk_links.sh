@@ -35,14 +35,67 @@ run_single_src_region_to_entire_cloud()
             2> >(tee $HOSTNAME.numa$numanode.routes.$src_cloud.$src_region.$dst_cloud.all.err >&2)
 }
 
-# From AWS
-for src_region in $(echo $AWS_REGIONS); do
-    run_single_src_region_to_entire_cloud 0 aws $src_region aws
-    run_single_src_region_to_entire_cloud 1 aws $src_region gcloud
-done
+run_all()
+{
+    # From AWS
+    for src_region in $(echo $AWS_REGIONS); do
+        run_single_src_region_to_entire_cloud 0 aws $src_region aws
+        run_single_src_region_to_entire_cloud 1 aws $src_region gcloud
+    done
 
-# From gcloud
-for src_region in $(echo $GCP_REGIONS); do
-    run_single_src_region_to_entire_cloud 0 gcloud $src_region aws
-    run_single_src_region_to_entire_cloud 1 gcloud $src_region gcloud
-done
+    # From gcloud
+    for src_region in $(echo $GCP_REGIONS); do
+        run_single_src_region_to_entire_cloud 0 gcloud $src_region aws
+        run_single_src_region_to_entire_cloud 1 gcloud $src_region gcloud
+    done
+}
+
+# Verification functions
+
+# Check whether the filename indicates that the src and dst clouds are the same.
+is_same_cloud_provider()
+{
+    file="$1"
+    file="$(basename "$file")"
+    name="$(echo "$file" | egrep -o 'routes\.(aws|gcp|gcloud)\.(.*)\.(aws|gcp|gcloud).all')"
+    name="$(echo "$name" | sed 's/\.gcp\./.gcloud./g')"
+    [ -z "$name" ] && return 1
+    src_cloud="$(echo "$name" | awk -F '.' '{print $2}')"
+    dst_cloud="$(echo "$name" | awk -F '.' '{print $(NF-1)}')"
+    [ "$src_cloud" = "$dst_cloud" ]
+}
+
+verify_dijkstra_completion_count()
+{
+    file="$1"
+    expected_count=$2
+
+    # No self-paths if src and dst are in the same cloud, decrement by one
+    is_same_cloud_provider "$file" && expected_count=$(($expected_count - 1))
+
+    actual_count=$(grep -c "Dijkstra from .* to .* completed. Found .* paths in total." "$file")
+    if [ $actual_count -ne $expected_count ]; then
+        echo >&2 "ERROR: $file: expected $expected_count Dijkstra completions, but got $actual_count"
+        # exit 1
+    fi
+}
+
+verify_all()
+{
+    echo "Verifying Dijkstra completion counts in each file ..."
+
+    for file in ./*.numa*.routes.*.aws.all.err; do
+        echo "Checking $file"
+        verify_dijkstra_completion_count $file $(echo "$AWS_REGIONS" | wc -w)
+    done
+
+    for file in ./*.numa*.routes.*.gcloud.all.err; do
+        echo "Checking $file"
+        verify_dijkstra_completion_count $file $(echo "$GCP_REGIONS" | wc -w)
+    done
+
+    echo "Done."
+}
+
+run_all
+verify_all
