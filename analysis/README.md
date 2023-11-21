@@ -90,13 +90,13 @@ mv routes.*.by_iso region_pair.by_iso/
 mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
 ```
 
-- (Optional) We can also plot the distribution of the routes statistics like `hopcount` and `distance` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
+- (Optional) We can also plot the distribution of the routes statistics like `hop_count` and `distance_km` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
 ```Shell
 # Optionally, filter by adding --src-cloud aws/gcloud --dst-cloud aws/gcloud, or also by regions: --src-region ... --dst-region ...
-./plot.routes.all_region_pairs.py --plot-heatmap --metrics hopcount --dirpath ./region_pair.by_geo.distribution/
-./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance --dirpath ./region_pair.by_geo.distribution/
-./plot.routes.all_region_pairs.py --plot-pdfs --metrics hopcount --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
-./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics hop_count --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance_km --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics hop_count --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance_km --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
 ```
 
 ### Traceroute from inside cloud regions

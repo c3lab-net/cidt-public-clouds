@@ -2,6 +2,8 @@
 
 import argparse
 import ast
+from enum import Enum
+import functools
 import json
 import os
 import re
@@ -9,6 +11,7 @@ import sys
 import time
 import logging
 from typing import Optional
+from geopy.distance import geodesic
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
 MATCHED_NODES_FILENAME_AWS = 'matched_nodes.aws.by_region.txt'
@@ -18,6 +21,13 @@ Coordinate = tuple[float, float]
 RouteInCoordinate = list[Coordinate]
 RouteInIP = list[str]
 RouteInISO = list[str]
+
+class RouteMetric(str, Enum):
+    HopCount = 'hop_count'
+    DistanceKM = 'distance_km'
+
+    def __str__(self) -> str:
+        return self.value
 
 def init_logging(level=logging.DEBUG):
     logging.basicConfig(level=level,
@@ -146,3 +156,27 @@ def DirType(path: str):
         return path
     else:
         raise argparse.ArgumentTypeError(f'{path} is not a valid directory path')
+
+def calculate_total_distance_km(hops: RouteInCoordinate) -> float:
+    """Calculate the total distance across all hops, by summing the pairwise distances.
+    """
+    if len(hops) <= 1:
+        return 0.
+
+    @functools.cache
+    def calculate_pairwise_distance_km(hop1: Coordinate, hop2: Coordinate) -> float:
+        return geodesic(hop1, hop2).km
+
+    total_distance = 0.
+    for i in range(len(hops) - 1):
+        total_distance += calculate_pairwise_distance_km(hops[i], hops[i + 1])
+    return total_distance
+
+def calculate_route_metric(route: str, metric: RouteMetric) -> float:
+    match metric:
+        case RouteMetric.HopCount:
+            return len(route.split('|'))
+        case RouteMetric.DistanceKM:
+            return round(calculate_total_distance_km([ast.literal_eval(e) for e in route.split('|')]), 2)
+        case _:
+            raise ValueError(f'Unknown metric {metric}')
