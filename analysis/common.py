@@ -133,13 +133,14 @@ def write_routes_to_file(routes: list[list], output_file: Optional[str] = None) 
         output.close()
         logging.info('Done')
 
-def detect_cloud_regions_from_filename(filename: str):
+def detect_cloud_regions_from_filename(filename: str) -> Optional[tuple[str, str, str, str]]:
     """Parse the filename and return a 4-item tuple (src_cloud, src_region, dst_cloud, dst_region)."""
     # filename example: routes.aws.af-south-1.aws.ap-northeast-1.by_geo
     regex_4_tuple = re.compile(r'.*\.(aws|gcloud|gcp)\.([\w-]+)\.(aws|gcloud|gcp)\.([\w-]+)\.by_.*')
     m = regex_4_tuple.match(filename)
     if m:
-        return m.groups()
+        (src_cloud, src_region, dst_cloud, dst_region) = m.groups()
+        return (src_cloud, src_region, dst_cloud, dst_region)
     # filename example: routes.aws.af-south-1.ap-northeast-1.by_geo
     # Assume both regions belong to the same cloud if the filename does not contain a second cloud name
     regex_3_tuple = re.compile(r'.*\.(aws|gcloud|gcp)\.([\w-]+)\.([\w-]+)\.by_.*')

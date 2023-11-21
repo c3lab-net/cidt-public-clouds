@@ -37,3 +37,8 @@ mv routes.*.by_geo region_pair.by_geo/
 mv routes.*.by_geo.distribution region_pair.by_geo.distribution/
 mv routes.*.by_iso region_pair.by_iso/
 mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
+
+# Consolidate all the geo distributions TSV files into one, for batch import into SQL
+./combine_per_region_pair_tsvs.py -i region_pair.by_geo.distribution/routes.*.by_geo.distribution -o ./routes.all.by_geo.distribution.tsv
+chmod 440 ./routes.all.by_geo.distribution.tsv
+# import this later into SQL.
