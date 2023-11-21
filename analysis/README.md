@@ -116,8 +116,8 @@ Due to inaccurate IP ranges or geolocation lookup, there can be routes that don'
 
 To get around this problem, we can get the ISO distribution for each cloud region, and manually pick the "correct" one by checking the map and (most of the time) picking the majority.
 ```Shell
-./cloud_region_distribution.py --cloud aws --of-iso > iso_distribution.aws.txt
-./cloud_region_distribution.py --cloud gcloud --of-iso > iso_distribution.gcloud.txt
+./distribution.cloud_region.py --cloud aws --of-iso > iso_distribution.aws.txt
+./distribution.cloud_region.py --cloud gcloud --of-iso > iso_distribution.gcloud.txt
 ```
 
 After manual inspection, we can save the result in a [CSV file](./results/iso_distributions/iso_distribution.all.csv) and later use this information to prune the routes (by the correct src/dst ISO of the respective region).
@@ -129,8 +129,8 @@ After manual inspection, we can save the result in a [CSV file](./results/iso_di
 
 Similarly, we can also get a distribution of the geo-coordinates of each region based on the matched IPs, and manually inspect the result to get the latitude/longitude similar to the above ISO distributions.
 ```Shell
-./cloud_region_distribution.py --cloud aws --of-coordinate > gps_distribution.aws.txt
-./cloud_region_distribution.py --cloud gcloud --of-coordinate > gps_distribution.gcloud.txt
+./distribution.cloud_region.py --cloud aws --of-coordinate > gps_distribution.aws.txt
+./distribution.cloud_region.py --cloud gcloud --of-coordinate > gps_distribution.gcloud.txt
 ```
 
 Again, we can save the result in a [CSV file](./results/geo_distributions/geo_distribution.all.csv) and later use this information as a ground truth to prune the routes (by the correct src/dst *ISO based on the geo coordinate* of the respective region, this is because coordinate equality check is too strict).
