@@ -17,6 +17,7 @@ MATCHED_NODES_FILENAME_GCLOUD = 'matched_nodes.gcloud.by_region.txt'
 Coordinate = tuple[float, float]
 RouteInCoordinate = list[Coordinate]
 RouteInIP = list[str]
+RouteInISO = list[str]
 
 def init_logging(level=logging.DEBUG):
     logging.basicConfig(level=level,
@@ -101,10 +102,26 @@ def load_itdk_node_ip_to_id_mapping(node_file='../data/caida-itdk/midar-iff.node
     return load_itdk_mapping_internal(node_file, True)
 
 def get_routes_from_file(filename) -> list[list]:
-    # Read the file and count the number of entries on each line
+    logging.info(f'Loading routes from {filename} ...')
     with open(filename, 'r') as file:
         lines = file.readlines()
-        return [ ast.literal_eval(line) for line in lines ]
+        routes = [ ast.literal_eval(line) for line in lines ]
+    logging.info(f'Loaded {len(routes)} routes')
+    return routes
+
+def write_routes_to_file(routes: list[list], output_file: Optional[str] = None) -> None:
+    if output_file:
+        output = open(output_file, 'x')
+        logging.info(f'Writing (lat, lon) routes to {output_file} ...')
+    else:
+        output = None
+
+    for route in routes:
+        print(route, file=output if output else sys.stdout)
+
+    if output:
+        output.close()
+        logging.info('Done')
 
 def detect_cloud_regions_from_filename(filename: str):
     """Parse the filename and return a 4-item tuple (src_cloud, src_region, dst_cloud, dst_region)."""
