@@ -14,6 +14,7 @@ from common import RouteMetric, calculate_route_metric, get_routes_from_file, in
 def remove_duplicate_consecutive_hops(route: list[Any]):
     prev_hop = None
     i = 0
+    # Keep at least 2 hops, aka source and destination.
     while i < len(route):
         hop = route[i]
         if hop == prev_hop:
@@ -21,6 +22,8 @@ def remove_duplicate_consecutive_hops(route: list[Any]):
         else:
             prev_hop = hop
             i += 1
+    if len(route) == 1:
+        route.append(route[0])
 
 def export_routes_distribution(routes: list[list], metrics:list[RouteMetric],
                                output: Optional[io.TextIOWrapper] = None,
