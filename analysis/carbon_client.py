@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-from collections import Counter
 import csv
 import io
 import logging
@@ -91,23 +90,12 @@ def get_route_check_function_by_ground_truth(iso_ground_truth: dict[str, str],
 
     return lambda route: route[0] == src_iso and route[-1] == dst_iso
 
-def export_routes_distribution(routes: list[list], output: Optional[io.TextIOWrapper] = None):
-    logging.info('Exporting routes distribution ...')
-
-    routes_as_str = [ '|'.join([str(e) for e in route]) for route in routes ]
-    for route_str, count in sorted(Counter(routes_as_str).items(), key=lambda x: x[1], reverse=True):
-        print(count, route_str, file=output if output else sys.stdout)
-
-    logging.info('Done')
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--routes_file', type=str, help='The routes file, each line contains a list of (lat, long) coordinates and represents a route.')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='The output file.')
     parser.add_argument('--convert-latlon-to-carbon-region', action='store_true',
                         help='Convert the routes from lat/lon coordinates to Carbon region names.')
-    parser.add_argument('--export-routes-distribution', action='store_true',
-                        help='Export the routes distribution.')
     parser.add_argument('--filter-iso-by-ground-truth', action='store_true', help='Filter the routes by ground truth ISOs.')
     parser.add_argument('--iso-ground-truth-csv', type=argparse.FileType('r'),
                         help='The CSV file containing the ground truth ISOs.')
@@ -117,8 +105,8 @@ def parse_args():
     parser.add_argument('--dst-region', required=False, help='The destination region')
     args = parser.parse_args()
 
-    if (args.convert_latlon_to_carbon_region or args.export_routes_distribution) and args.routes_file is None:
-        parser.error('routes_file must be specified when --convert-latlon-to-carbon-region or --export-routes-distribution is specified')
+    if args.convert_latlon_to_carbon_region and args.routes_file is None:
+        parser.error('routes_file must be specified when --convert-latlon-to-carbon-region is specified')
 
     if args.filter_iso_by_ground_truth:
         if not args.convert_latlon_to_carbon_region:
@@ -150,9 +138,6 @@ def main():
         else:
             check_route_by_ground_truth = lambda _: True
         convert_latlon_to_carbon_region(routes, check_route_by_ground_truth, args.output)
-    elif args.export_routes_distribution:
-        routes = get_routes_from_file(args.routes_file)
-        export_routes_distribution(routes, args.output)
     else:
         raise ValueError('No action specified')
 

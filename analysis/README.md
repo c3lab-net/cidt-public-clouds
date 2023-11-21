@@ -42,8 +42,8 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - Finally, we can export the distribution of geo-coordinates or ISOs for easy lookup later (e.g. in a database).
 ```Shell
-./carbon_client.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
-./carbon_client.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
+./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
+./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
 ```
 
 ### All region pairs (batch execution)
@@ -71,7 +71,7 @@ chmod 440 routes.*.by_geo
 for file in routes.*.by_geo; do
     echo "Processing $file ..."
     name="$(basename "$file" ".by_geo")"
-    ./carbon_client.py --export-routes-distribution --routes_file "$name.by_geo" > "$name.by_geo.distribution"
+    ./distribution.routes.py --export-routes-distribution --routes_file "$name.by_geo" > "$name.by_geo.distribution"
     ./carbon_client.py --convert-latlon-to-carbon-region --routes_file "$file" > "$name".by_iso
     # It is not necessary to filter again as we've filtered earlier. See notes at the end of "Clean up noisy routes" section.
     # ./carbon_client.py --convert-latlon-to-carbon-region --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud "$src_cloud" --src-region "$src_region" --dst-cloud "$dst_cloud" --dst-region "$dst_region" --routes_file "$file" > "$name".by_iso
@@ -79,7 +79,7 @@ for file in routes.*.by_geo; do
     src_region="$(echo "$name" | awk -F. '{print $3}')"
     dst_cloud="$(echo "$name" | awk -F. '{print $4}')"
     dst_region="$(echo "$name" | awk -F. '{print $5}')"
-    ./carbon_client.py --export-routes-distribution --routes_file "$name.by_iso" > "$name.by_iso.distribution"
+    ./distribution.routes.py --export-routes-distribution --routes_file "$name.by_iso" > "$name.by_iso.distribution"
     chmod 440 "$name.by_geo.distribution" $name.by_iso $name.by_iso.distribution
 done
 
