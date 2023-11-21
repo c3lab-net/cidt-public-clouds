@@ -23,7 +23,8 @@ def remove_duplicate_consecutive_hops(route: list[Any]):
             i += 1
 
 def export_routes_distribution(routes: list[list], metrics:list[RouteMetric],
-                               output: Optional[io.TextIOWrapper] = None):
+                               output: Optional[io.TextIOWrapper] = None,
+                               header: bool = False):
     logging.info('Exporting routes distribution ...')
 
     columns = ['count'] + [metric for metric in metrics] + ['route']
@@ -39,7 +40,7 @@ def export_routes_distribution(routes: list[list], metrics:list[RouteMetric],
         rows.append(row)
 
     df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(output if output else sys.stdout, sep='\t', index=False)
+    df.to_csv(output if output else sys.stdout, sep='\t', index=False, header=header)
 
     logging.info('Done')
 
@@ -50,6 +51,7 @@ def parse_args():
                         help='Remove duplicate consecutive hops from the routes.')
     parser.add_argument('--export-routes-distribution', required=True, action='store_true',
                         help='Export the routes distribution.')
+    parser.add_argument('--no-header', action='store_true', help='Do not include the header in the output.')
     parser.add_argument('--include', nargs='*', type=RouteMetric, choices=list(RouteMetric),
                         help='The additional metrics to include.')
     parser.add_argument('-o', '--output-tsv', type=argparse.FileType('w'), help='The output TSV file.')
@@ -69,7 +71,7 @@ def main():
         if args.remove_duplicate_consecutive_hops:
             for route in routes:
                 remove_duplicate_consecutive_hops(route)
-        export_routes_distribution(routes, args.include, args.output_tsv)
+        export_routes_distribution(routes, args.include, args.output_tsv, not args.no_header)
     else:
         raise ValueError('No action specified')
 
