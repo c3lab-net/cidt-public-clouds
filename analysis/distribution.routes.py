@@ -11,6 +11,17 @@ import pandas as pd
 
 from common import RouteMetric, calculate_route_metric, get_routes_from_file, init_logging
 
+def remove_duplicate_consecutive_hops(route: list[Any]):
+    prev_hop = None
+    i = 0
+    while i < len(route):
+        hop = route[i]
+        if hop == prev_hop:
+            del route[i]
+        else:
+            prev_hop = hop
+            i += 1
+
 def export_routes_distribution(routes: list[list], metrics:list[RouteMetric],
                                output: Optional[io.TextIOWrapper] = None):
     logging.info('Exporting routes distribution ...')
@@ -35,6 +46,8 @@ def export_routes_distribution(routes: list[list], metrics:list[RouteMetric],
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--routes_file', type=str, required=True, help='The routes file, each line contains a list of (lat, long) coordinates and represents a route.')
+    parser.add_argument('--remove-duplicate-consecutive-hops', action='store_true',
+                        help='Remove duplicate consecutive hops from the routes.')
     parser.add_argument('--export-routes-distribution', required=True, action='store_true',
                         help='Export the routes distribution.')
     parser.add_argument('--include', nargs='*', type=RouteMetric, choices=list(RouteMetric),
@@ -53,6 +66,9 @@ def main():
 
     if args.export_routes_distribution:
         routes = get_routes_from_file(args.routes_file)
+        if args.remove_duplicate_consecutive_hops:
+            for route in routes:
+                remove_duplicate_consecutive_hops(route)
         export_routes_distribution(routes, args.include, args.output_tsv)
     else:
         raise ValueError('No action specified')
