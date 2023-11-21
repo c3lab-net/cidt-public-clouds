@@ -92,11 +92,13 @@ def get_route_check_function_by_ground_truth(iso_ground_truth: dict[str, str],
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--routes_file', type=str, help='The routes file, each line contains a list of (lat, long) coordinates and represents a route.')
+    parser.add_argument('--routes_file', type=str, required=True,
+                        help='The routes file, each line contains a list of (lat, long) coordinates and represents a route.')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='The output file.')
-    parser.add_argument('--convert-latlon-to-carbon-region', action='store_true',
+    parser.add_argument('--convert-latlon-to-carbon-region', action='store_true', required=True,
                         help='Convert the routes from lat/lon coordinates to Carbon region names.')
-    parser.add_argument('--filter-iso-by-ground-truth', action='store_true', help='Filter the routes by ground truth ISOs.')
+    parser.add_argument('--filter-iso-by-ground-truth', action='store_true',
+                        help='Filter the routes by ground truth ISOs.')
     parser.add_argument('--iso-ground-truth-csv', type=argparse.FileType('r'),
                         help='The CSV file containing the ground truth ISOs.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
@@ -104,9 +106,6 @@ def parse_args():
     parser.add_argument('--src-region', required=False, help='The source region')
     parser.add_argument('--dst-region', required=False, help='The destination region')
     args = parser.parse_args()
-
-    if args.convert_latlon_to_carbon_region and args.routes_file is None:
-        parser.error('routes_file must be specified when --convert-latlon-to-carbon-region is specified')
 
     if args.filter_iso_by_ground_truth:
         if not args.convert_latlon_to_carbon_region:
