@@ -11,12 +11,8 @@ import traceback
 from typing import Callable, Optional
 import pandas as pd
 
-from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
+from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
 from carbon_client import get_carbon_region_from_coordinate
-
-Coordinate = tuple[float, float]
-RouteInCoordinate = list[Coordinate]
-RouteInIP = list[str]
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo') -> pd.DataFrame:
     logging.info(f'Loading node geo entries from {node_geo_filename} ...')
