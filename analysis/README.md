@@ -42,8 +42,9 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - Finally, we can export the distribution of geo-coordinates or ISOs for easy lookup later (e.g. in a database).
 ```Shell
-./carbon_client.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
-./carbon_client.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
+# (optionally, include additional metrics and remove duplicate consecutive hops) --include hop_count distance_km --remove-duplicate-consecutive-hops
+./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
+./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
 ```
 
 ### All region pairs (batch execution)
@@ -65,38 +66,16 @@ Afterwards, we can run IP-to-geo-coordinate, geo-coordinate-to-ISO and ISO distr
 Note that IP-to-geo script accepts multiple input files, due to its overhead of loading the GEO dataset. The other two scripts can be easily ran in a for loop.
 Also see the below section ("Clean up noisy routes") for details on filtering by ground truth.
 ```Shell
-set -e
-./itdk_geo.py --convert-ip-to-latlon --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --routes_file region_pair.by_ip/routes.*.by_ip --outputs
-chmod 440 routes.*.by_geo
-for file in routes.*.by_geo; do
-    echo "Processing $file ..."
-    name="$(basename "$file" ".by_geo")"
-    ./carbon_client.py --export-routes-distribution --routes_file "$name.by_geo" > "$name.by_geo.distribution"
-    ./carbon_client.py --convert-latlon-to-carbon-region --routes_file "$file" > "$name".by_iso
-    src_cloud="$(echo "$name" | awk -F. '{print $2}')"
-    src_region="$(echo "$name" | awk -F. '{print $3}')"
-    dst_cloud="$(echo "$name" | awk -F. '{print $4}')"
-    dst_region="$(echo "$name" | awk -F. '{print $5}')"
-    ./carbon_client.py --export-routes-distribution --routes_file "$name.by_iso" > "$name.by_iso.distribution"
-    # It is not necessary to filter again as we've filtered earlier. See notes at the end of "Clean up noisy routes" section.
-    # ./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud "$src_cloud" --src-region "$src_region" --dst-cloud "$dst_cloud" --dst-region "$dst_region" --routes_file "$name.by_iso" > "$name.by_iso.distribution"
-    chmod 440 "$name.by_geo.distribution" $name.by_iso $name.by_iso.distribution
-done
-
-mkdir region_pair.by_geo region_pair.by_geo.distribution region_pair.by_iso region_pair.by_iso.distribution
-mv routes.*.by_geo region_pair.by_geo/
-mv routes.*.by_geo.distribution region_pair.by_geo.distribution/
-mv routes.*.by_iso region_pair.by_iso/
-mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
+./run_all.conversions.sh
 ```
 
-- (Optional) We can also plot the distribution of the routes statistics like `hopcount` and `distance` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
+- (Optional) We can also plot the distribution of the routes statistics like `hop_count` and `distance_km` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
 ```Shell
 # Optionally, filter by adding --src-cloud aws/gcloud --dst-cloud aws/gcloud, or also by regions: --src-region ... --dst-region ...
-./plot.routes.all_region_pairs.py --plot-heatmap --metrics hopcount --dirpath ./region_pair.by_geo.distribution/
-./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance --dirpath ./region_pair.by_geo.distribution/
-./plot.routes.all_region_pairs.py --plot-pdfs --metrics hopcount --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
-./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics hop_count --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance_km --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics hop_count --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance_km --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
 ```
 
 ### Traceroute from inside cloud regions
@@ -116,21 +95,21 @@ Due to inaccurate IP ranges or geolocation lookup, there can be routes that don'
 
 To get around this problem, we can get the ISO distribution for each cloud region, and manually pick the "correct" one by checking the map and (most of the time) picking the majority.
 ```Shell
-./cloud_region_distribution.py --cloud aws --of-iso > iso_distribution.aws.txt
-./cloud_region_distribution.py --cloud gcloud --of-iso > iso_distribution.gcloud.txt
+./distribution.cloud_region.py --cloud aws --of-iso > iso_distribution.aws.txt
+./distribution.cloud_region.py --cloud gcloud --of-iso > iso_distribution.gcloud.txt
 ```
 
 After manual inspection, we can save the result in a [CSV file](./results/iso_distributions/iso_distribution.all.csv) and later use this information to prune the routes (by the correct src/dst ISO of the respective region).
 ```Shell
-./carbon_client.py --export-routes-distribution --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
+./carbon_client.py --convert-latlon-to-carbon-region --filter-iso-by-ground-truth --iso-ground-truth-csv ./results/iso_distributions/iso_distribution.all.csv --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1 --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_iso
 ```
 
 ### By geo-coordinate
 
 Similarly, we can also get a distribution of the geo-coordinates of each region based on the matched IPs, and manually inspect the result to get the latitude/longitude similar to the above ISO distributions.
 ```Shell
-./cloud_region_distribution.py --cloud aws --of-coordinate > gps_distribution.aws.txt
-./cloud_region_distribution.py --cloud gcloud --of-coordinate > gps_distribution.gcloud.txt
+./distribution.cloud_region.py --cloud aws --of-coordinate > gps_distribution.aws.txt
+./distribution.cloud_region.py --cloud gcloud --of-coordinate > gps_distribution.gcloud.txt
 ```
 
 Again, we can save the result in a [CSV file](./results/geo_distributions/geo_distribution.all.csv) and later use this information as a ground truth to prune the routes (by the correct src/dst *ISO based on the geo coordinate* of the respective region, this is because coordinate equality check is too strict).

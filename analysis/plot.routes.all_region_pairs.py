@@ -5,15 +5,13 @@ import ast
 import logging
 import os
 import re
-import functools
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from geopy.distance import geodesic
 from typing import Any, Callable, Optional
 
-from common import DirType, init_logging
+from common import DirType, RouteMetric, calculate_route_metric, init_logging
 
 DATA_SOURCE = 'caida.itdk'
 
@@ -41,25 +39,6 @@ def load_weighted_hops(file_path: str) -> pd.DataFrame:
 
     # Create a DataFrame
     return pd.DataFrame.from_dict({'weight': l_weight, 'hops': l_hops})
-
-def calculate_total_distance(hops: list[str]) -> float:
-    """Calculate the total distance across all hops.
-
-        Each hop is represented as a string of the form: '(lat,lon)'
-    """
-    if len(hops) <= 1:
-        return 0.
-
-    @functools.cache
-    def calculate_pairwise_distance_km(hop1: str, hop2: str) -> float:
-        (lat1, lon1) = ast.literal_eval(hop1)
-        (lat2, lon2) = ast.literal_eval(hop2)
-        return geodesic((lat1, lon1), (lat2, lon2)).km
-
-    total_distance = 0.
-    for i in range(len(hops) - 1):
-        total_distance += calculate_pairwise_distance_km(hops[i], hops[i + 1])
-    return total_distance
 
 def get_hops_and_weights(file_path: str) -> tuple[np.ndarray, np.ndarray]:
     data = load_weighted_hops(file_path)
@@ -161,7 +140,7 @@ def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[li
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--metrics', choices=['hopcount', 'distance'], required=True, nargs='+',
+    parser.add_argument('--metrics', required=True, nargs='+', type=RouteMetric, choices=list(RouteMetric),
                         help='The metrics to plot')
     parser.add_argument('--dirpath', type=DirType, required=True, help='The directory that contains the routes files')
     parser.add_argument('--plot-heatmap', action='store_true',
@@ -190,12 +169,7 @@ def main():
     args = parse_args()
 
     for metric in args.metrics:
-        if metric == 'hopcount':
-            process_hops = lambda x: len(x.split('|'))
-        elif metric == 'distance':
-            process_hops = lambda x: calculate_total_distance(x.split('|'))
-        else:
-            raise NotImplementedError(f'Unknown metric: {metric}')
+        process_hops = lambda x: calculate_route_metric(x, metric)
         value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric, args.plot_pdfs,
                                                                    args.src_cloud, args.src_region,
                                                                    args.dst_cloud, args.dst_region)

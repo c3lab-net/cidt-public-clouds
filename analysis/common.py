@@ -2,16 +2,32 @@
 
 import argparse
 import ast
+from enum import Enum
+import functools
 import json
 import os
 import re
 import sys
 import time
 import logging
+from typing import Optional
+from geopy.distance import geodesic
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
 MATCHED_NODES_FILENAME_AWS = 'matched_nodes.aws.by_region.txt'
 MATCHED_NODES_FILENAME_GCLOUD = 'matched_nodes.gcloud.by_region.txt'
+
+Coordinate = tuple[float, float]
+RouteInCoordinate = list[Coordinate]
+RouteInIP = list[str]
+RouteInISO = list[str]
+
+class RouteMetric(str, Enum):
+    HopCount = 'hop_count'
+    DistanceKM = 'distance_km'
+
+    def __str__(self) -> str:
+        return self.value
 
 def init_logging(level=logging.DEBUG):
     logging.basicConfig(level=level,
@@ -96,18 +112,35 @@ def load_itdk_node_ip_to_id_mapping(node_file='../data/caida-itdk/midar-iff.node
     return load_itdk_mapping_internal(node_file, True)
 
 def get_routes_from_file(filename) -> list[list]:
-    # Read the file and count the number of entries on each line
+    logging.info(f'Loading routes from {filename} ...')
     with open(filename, 'r') as file:
         lines = file.readlines()
-        return [ ast.literal_eval(line) for line in lines ]
+        routes = [ ast.literal_eval(line) for line in lines ]
+    logging.info(f'Loaded {len(routes)} routes')
+    return routes
 
-def detect_cloud_regions_from_filename(filename: str):
+def write_routes_to_file(routes: list[list], output_file: Optional[str] = None) -> None:
+    if output_file:
+        output = open(output_file, 'x')
+        logging.info(f'Writing (lat, lon) routes to {output_file} ...')
+    else:
+        output = None
+
+    for route in routes:
+        print(route, file=output if output else sys.stdout)
+
+    if output:
+        output.close()
+        logging.info('Done')
+
+def detect_cloud_regions_from_filename(filename: str) -> Optional[tuple[str, str, str, str]]:
     """Parse the filename and return a 4-item tuple (src_cloud, src_region, dst_cloud, dst_region)."""
     # filename example: routes.aws.af-south-1.aws.ap-northeast-1.by_geo
     regex_4_tuple = re.compile(r'.*\.(aws|gcloud|gcp)\.([\w-]+)\.(aws|gcloud|gcp)\.([\w-]+)\.by_.*')
     m = regex_4_tuple.match(filename)
     if m:
-        return m.groups()
+        (src_cloud, src_region, dst_cloud, dst_region) = m.groups()
+        return (src_cloud, src_region, dst_cloud, dst_region)
     # filename example: routes.aws.af-south-1.ap-northeast-1.by_geo
     # Assume both regions belong to the same cloud if the filename does not contain a second cloud name
     regex_3_tuple = re.compile(r'.*\.(aws|gcloud|gcp)\.([\w-]+)\.([\w-]+)\.by_.*')
@@ -124,3 +157,27 @@ def DirType(path: str):
         return path
     else:
         raise argparse.ArgumentTypeError(f'{path} is not a valid directory path')
+
+def calculate_total_distance_km(hops: RouteInCoordinate) -> float:
+    """Calculate the total distance across all hops, by summing the pairwise distances.
+    """
+    if len(hops) <= 1:
+        return 0.
+
+    @functools.cache
+    def calculate_pairwise_distance_km(hop1: Coordinate, hop2: Coordinate) -> float:
+        return geodesic(hop1, hop2).km
+
+    total_distance = 0.
+    for i in range(len(hops) - 1):
+        total_distance += calculate_pairwise_distance_km(hops[i], hops[i + 1])
+    return total_distance
+
+def calculate_route_metric(route: str, metric: RouteMetric) -> float:
+    match metric:
+        case RouteMetric.HopCount:
+            return len(route.split('|'))
+        case RouteMetric.DistanceKM:
+            return round(calculate_total_distance_km([ast.literal_eval(e) for e in route.split('|')]), 2)
+        case _:
+            raise ValueError(f'Unknown metric {metric}')

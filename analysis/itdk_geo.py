@@ -11,12 +11,8 @@ import traceback
 from typing import Callable, Optional
 import pandas as pd
 
-from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
+from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
 from carbon_client import get_carbon_region_from_coordinate
-
-Coordinate = tuple[float, float]
-RouteInCoordinate = list[Coordinate]
-RouteInIP = list[str]
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo') -> pd.DataFrame:
     logging.info(f'Loading node geo entries from {node_geo_filename} ...')
@@ -138,8 +134,8 @@ def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[s
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--routes_files', type=str, nargs='+', help='The routes file, each line contains a list that represents a route.')
-    parser.add_argument('--convert-ip-to-latlon', action='store_true',
+    parser.add_argument('--routes_files', type=str, required=True, nargs='+', help='The routes file, each line contains a list that represents a route.')
+    parser.add_argument('--convert-ip-to-latlon', action='store_true', required=True,
                         help='Convert the routes from IP addresses to lat/lon coordinates')
     parser.add_argument('-o', '--outputs', type=str, nargs='*', help='The output file.')
     parser.add_argument('--filter-geo-coordinate-by-ground-truth', action='store_true',
@@ -151,12 +147,6 @@ def parse_args():
     parser.add_argument('--src-region', required=False, help='The source region')
     parser.add_argument('--dst-region', required=False, help='The destination region')
     args = parser.parse_args()
-
-    if not args.convert_ip_to_latlon:
-        parser.error('No action specified. Please specify --convert-ip-to-latlon')
-
-    if args.convert_ip_to_latlon and args.routes_files is None:
-        parser.error('routes_files must be specified when --convert-ip-to-latlon is specified')
 
     if args.outputs is not None and len(args.outputs) not in [0, len(args.routes_files)]:
         parser.error('The number of output files must match the number of routes files, or be 0 (auto-naming files)')
