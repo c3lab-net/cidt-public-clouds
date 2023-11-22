@@ -3,6 +3,7 @@
 import argparse
 import io
 import logging
+import math
 import sys
 import traceback
 from typing import Optional
@@ -17,7 +18,7 @@ session = requests_cache.CachedSession('igdb_cache', backend='filesystem')
 IGDB_API_URL = 'http://localhost:8082'
 
 def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> Route:
-    """Get the physical hops between two coordinates using iGDB."""
+    """Get the physical hops between two coordinates using iGDB, inclusive of both ends."""
     (src_lat, src_lon) = src
     (dst_lat, dst_lon) = dst
     response = session.get(f'{IGDB_API_URL}/physical-route/', params={
@@ -37,6 +38,14 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> Route:
         logging.error(traceback.format_exc())
         raise
 
+    # Ensure the first and last hops in the response are the same as the src and dst in the request
+    first_hop = response_json[0]
+    last_hop = response_json[-1]
+    assert math.isclose(first_hop[0], src_lat) and math.isclose(first_hop[1], src_lon), \
+        f'Response first hop {first_hop} is not the same as the src {src}'
+    assert math.isclose(last_hop[0], dst_lat) and math.isclose(last_hop[1], dst_lon), \
+        f'Response last hop {last_hop} is not the same as the dst {dst}'
+
     physical_hops = []
     for hop in response_json:
         # Convert JSON list to python tuple
@@ -48,10 +57,10 @@ def convert_logical_route_to_physical_route(route: Route) -> Route:
     for i in range(len(route) - 1):
         hop1 = route[i]
         hop2 = route[i + 1]
-        # Each logical step can have multiple physical hops
+        # Each logical step can have multiple physical hops, and note that these hops are inclusive on both ends
         intermediate_hops = get_igdb_physical_hops(hop1, hop2)
-        # Remove the first hop if it is the same as the last hop of the previous step
-        if len(physical_route) > 0 and intermediate_hops[0] == physical_route[-1]:
+        # Connect physical hops together, while removing the common intermediate hop
+        if len(physical_route) > 0:
             intermediate_hops = intermediate_hops[1:]
         physical_route += intermediate_hops[:-1]
     return physical_route
