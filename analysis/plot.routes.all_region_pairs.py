@@ -2,6 +2,7 @@
 
 import argparse
 import ast
+import csv
 import logging
 import os
 import re
@@ -24,18 +25,16 @@ def load_weighted_hops(file_path: str) -> pd.DataFrame:
         1 hop1|hop2
         ...
     """
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-
-    # Split each line into two parts
     l_weight = []
     l_hops = []
-    for line in lines:
-        parts = line.strip().split(' ', 1)
-        weight = float(parts[0])
-        hops = parts[1]
-        l_weight.append(weight)
-        l_hops.append(hops)
+
+    with open(file_path, 'r') as file:
+        reader = csv.DictReader(file, delimiter='\t')
+        for row in reader:
+            weight = float(row['count'])
+            hops = row['route']
+            l_weight.append(weight)
+            l_hops.append(hops)
 
     # Create a DataFrame
     return pd.DataFrame.from_dict({'weight': l_weight, 'hops': l_hops})
