@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from dataclasses import dataclass
 import io
 import logging
 import math
@@ -8,16 +9,73 @@ import sys
 import traceback
 from typing import Optional
 import requests_cache
+from shapely import wkt
+from shapely.geometry import MultiLineString
+from geopy.distance import geodesic
 
 from common import get_routes_from_file, init_logging
 
 Coordinate=tuple[float, float]
-Route=list[Coordinate]
+LogicalRoute=list[Coordinate]
+
+@dataclass
+class PhysicalRoute:
+    routers_latlon: list[Coordinate]
+    distance_km: float
+    fiber_wkt_paths: MultiLineString
+    fiber_types: list[str]
+
+    def validate(self):
+        assert isinstance(self.routers_latlon, list) and len(self.routers_latlon) >= 2, \
+            'Expect at least two hops in the physical route, but got %s' % self.routers_latlon
+        assert self.distance_km >= 0, 'Expect distance_km >= 0, but got %s' % self.distance_km
+        assert self.fiber_wkt_paths.geom_type == 'MultiLineString', \
+                'Expect fiber_wkt_paths to be a MultiLineString, but got %s' % self.fiber_wkt_paths.geom_type
+        assert len(self.fiber_wkt_paths.geoms) == len(self.routers_latlon) - 1, \
+                'Expect fiber_wkt_paths to have %d lines, but got %d' % \
+                    (len(self.routers_latlon) - 1, len(self.fiber_wkt_paths.geoms))
+        assert len(self.fiber_types) == len(self.fiber_wkt_paths.geoms), \
+                'Expect fiber_types to have %d elements, but got %d' % \
+                    (len(self.fiber_wkt_paths.geoms), len(self.fiber_types))
+        for fiber_type in self.fiber_types:
+            assert fiber_type in ['land', 'submarine'], 'Invalid fiber_type %s' % fiber_type
+
+    def extend(self, other):
+        if not isinstance(other, PhysicalRoute):
+            raise ValueError('Expect other to be a PhysicalRoute, but got %s' % other)
+        # Connect physical hops together, while removing the common intermediate hop
+        if len(self.routers_latlon) == 0:
+            self.routers_latlon.extend(other.routers_latlon)
+        else:
+            THRESHOLD_CONSECUTIVE_HOPS_KM = 5
+            assert geodesic(self.routers_latlon[-1], other.routers_latlon[0]).km < THRESHOLD_CONSECUTIVE_HOPS_KM, \
+                'Expect the last hop in self to be the same as the first hop in other, but got %s and %s' % \
+                    (self.routers_latlon[-1], other.routers_latlon[0])
+            self.routers_latlon.extend(other.routers_latlon[1:])
+        self.distance_km += other.distance_km
+        self.fiber_wkt_paths = MultiLineString(list(self.fiber_wkt_paths.geoms) + list(other.fiber_wkt_paths.geoms))
+        self.fiber_types.extend(other.fiber_types)
+
+    def to_tsv(self):
+        return '\t'.join([
+            str(self.routers_latlon),
+            str(self.distance_km),
+            self.fiber_wkt_paths.wkt,
+            '|'.join(self.fiber_types),
+        ])
 
 session = requests_cache.CachedSession('igdb_cache', backend='filesystem')
 IGDB_API_URL = 'http://localhost:8082'
 
-def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> Route:
+def load_fiber_wkt_paths(fiber_wkt_paths: str) -> MultiLineString:
+    try:
+        return wkt.loads(fiber_wkt_paths)
+    except Exception as ex:
+        logging.error(ex)
+        logging.error(traceback.format_exc())
+        raise AssertionError('Invalid fiber_wkt_paths %s: %s' % (fiber_wkt_paths, ex))
+
+def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> PhysicalRoute:
     """Get the physical hops between two coordinates using iGDB, inclusive of both ends."""
     (src_lat, src_lon) = src
     (dst_lat, dst_lon) = dst
@@ -27,49 +85,51 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> Route:
         'dst_latitude': dst_lat,
         'dst_longitude': dst_lon,
     })
-    try:
-        assert response.ok, "iGDB physical hops lookup failed for %s -> %s (%d): %s" % \
-            (src, dst, response.status_code, response.text)
-        response_json = response.json()
-        assert isinstance(response_json, list), 'Invalid iGDB physical hops lookup response: %s' % response.text
-        assert len(response_json) >= 2, 'Expect at least two hops in the physical route, but got %s' % response.text
-    except Exception as ex:
-        logging.error(ex)
-        logging.error(traceback.format_exc())
-        raise
+    assert response.ok, "iGDB physical hops lookup failed for %s -> %s (%d): %s" % \
+        (src, dst, response.status_code, response.text)
+    response_json = response.json()
 
-    # Ensure the first and last hops in the response are the same as the src and dst in the request
-    first_hop = response_json[0]
-    last_hop = response_json[-1]
-    assert math.isclose(first_hop[0], src_lat) and math.isclose(first_hop[1], src_lon), \
-        f'Response first hop {first_hop} is not the same as the src {src}'
-    assert math.isclose(last_hop[0], dst_lat) and math.isclose(last_hop[1], dst_lon), \
-        f'Response last hop {last_hop} is not the same as the dst {dst}'
+    routers_latlon: list[Coordinate] = [Coordinate(item) for item in response_json['routers_latlon']]
+    distance_km: float = response_json['distance_km']
+    fiber_wkt_paths: MultiLineString = load_fiber_wkt_paths(response_json['fiber_wkt_paths'])
+    fiber_types: list[str] = response_json['fiber_types']
 
-    physical_hops = []
-    for hop in response_json:
-        # Convert JSON list to python tuple
-        physical_hops.append(tuple(hop))
-    return physical_hops
+    physical_route = PhysicalRoute(routers_latlon, distance_km, fiber_wkt_paths, fiber_types)
+    physical_route.validate()
 
-def convert_logical_route_to_physical_route(route: Route) -> Route:
-    physical_route: Route = []
-    for i in range(len(route) - 1):
-        hop1 = route[i]
-        hop2 = route[i + 1]
-        # Each logical step can have multiple physical hops, and note that these hops are inclusive on both ends
-        intermediate_hops = get_igdb_physical_hops(hop1, hop2)
-        # Connect physical hops together, while removing the common intermediate hop
-        if len(physical_route) > 0:
-            intermediate_hops = intermediate_hops[1:]
-        physical_route += intermediate_hops[:-1]
     return physical_route
 
-def convert_all_logical_routes_to_physical_routes(logical_routes: list[Route],
+def validate_start_end_offset(logical_route: LogicalRoute, physical_route: PhysicalRoute) -> None:
+    logical_start = logical_route[0]
+    logical_end = logical_route[-1]
+    physical_start = physical_route.routers_latlon[0]
+    physical_end = physical_route.routers_latlon[-1]
+
+    logging.info('\tlogical route: start=%s, end=%s, physical route: start=%s, end=%s',
+                 logical_start, logical_end, physical_start, physical_end)
+
+    start_offset_km = geodesic(logical_start, physical_start).km
+    end_offset_km = geodesic(logical_end, physical_end).km
+    DISTANCE_THRESHOLD_KM = 50
+    logging.info('\tdistance (logical->physical): start = %f km, end = %f km',
+                 start_offset_km, end_offset_km)
+    assert start_offset_km < DISTANCE_THRESHOLD_KM, 'Start offset is too large: %f km' % start_offset_km
+    assert end_offset_km < DISTANCE_THRESHOLD_KM, 'End offset is too large: %f km' % end_offset_km
+
+def convert_logical_route_to_physical_route(logical_route: LogicalRoute) -> PhysicalRoute:
+    logging.info('Converting logical route %s ...', logical_route)
+    physical_route: PhysicalRoute = PhysicalRoute([], 0, MultiLineString([]), [])
+    for i in range(len(logical_route) - 1):
+        intermediate_hops = get_igdb_physical_hops(logical_route[i], logical_route[i + 1])
+        physical_route.extend(intermediate_hops)
+    validate_start_end_offset(logical_route, physical_route)
+    return physical_route
+
+def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRoute],
                                                   output: Optional[io.TextIOWrapper]) -> None:
-    for route in logical_routes:
-        physical_route = convert_logical_route_to_physical_route(route)
-        print(physical_route, file=output if output else sys.stdout)
+    for logical_route in logical_routes:
+        physical_route = convert_logical_route_to_physical_route(logical_route)
+        print(physical_route.to_tsv(), file=output if output else sys.stdout)
 
 def parse_args():
     parser = argparse.ArgumentParser()
