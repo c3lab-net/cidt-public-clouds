@@ -14,6 +14,11 @@ for file in routes.*.by_geo; do
     echo "Processing $file ..."
     name="$(basename "$file" ".by_geo")"
 
+    # Call iGDB to convert logical hops to physical hops
+    mv $name.by_geo $name.by_geo.logical
+    ./igdb_client.py --convert-to-physical-hops --routes_file $name.by_geo.logical -o $name.by_geo.physical
+    awk -F '\t' '{print $1}' $name.by_geo.physical > $name.by_geo
+
     # Geo distribution
     ./distribution.routes.py --export-routes-distribution --include hop_count distance_km --remove-duplicate-consecutive-hops --routes_file "$name.by_geo" > "$name.by_geo.distribution"
 
@@ -29,11 +34,11 @@ for file in routes.*.by_geo; do
     # ISO distribution
     ./distribution.routes.py --export-routes-distribution --routes_file "$name.by_iso" > "$name.by_iso.distribution"
 
-    chmod 440 "$name.by_geo.distribution" $name.by_iso $name.by_iso.distribution
+    chmod 440 "$name.by_geo."{logical,physical} "$name.by_geo.distribution" $name.by_iso $name.by_iso.distribution
 done
 
 mkdir region_pair.by_geo region_pair.by_geo.distribution region_pair.by_iso region_pair.by_iso.distribution
-mv routes.*.by_geo region_pair.by_geo/
+mv routes.*.by_geo{,.logical,.physical} region_pair.by_geo/
 mv routes.*.by_geo.distribution region_pair.by_geo.distribution/
 mv routes.*.by_iso region_pair.by_iso/
 mv routes.*.by_iso.distribution region_pair.by_iso.distribution/
