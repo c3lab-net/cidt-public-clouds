@@ -30,8 +30,12 @@ def combine_tsv_files_and_add_regions(input_files: list[str], output_file: str) 
 
         combined_df = pd.concat([combined_df, df], ignore_index=True)
 
-    # Reorder columns with the new ones at the beginning
-    new_columns = ['src_cloud', 'src_region', 'dst_cloud', 'dst_region'] + REQUIRED_COLUMNS
+    # Reorder columns with the new ones and required columns at the beginning
+    FILE_NAME_COLUMNS = ['src_cloud', 'src_region', 'dst_cloud', 'dst_region']
+    per_file_columns = combined_df.columns.tolist()
+    for required_column in FILE_NAME_COLUMNS + REQUIRED_COLUMNS:
+        per_file_columns.remove(required_column)
+    new_columns = FILE_NAME_COLUMNS + REQUIRED_COLUMNS + per_file_columns
     combined_df = combined_df[new_columns]
 
     logging.info(f'Writing to {output_file} ...')
