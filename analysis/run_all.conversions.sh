@@ -20,7 +20,7 @@ for file in routes.*.by_geo; do
     awk -F '\t' '{print $1}' $name.by_geo.physical > $name.by_geo
 
     # Geo distribution
-    ./distribution.routes.py --export-routes-distribution --include hop_count distance_km --remove-duplicate-consecutive-hops --routes_file "$name.by_geo" > "$name.by_geo.distribution"
+    ./distribution.routes.py --export-routes-distribution --include hop_count distance_km fiber_wkt_paths fiber_types --physical-routes-tsv $name.by_geo.physical --routes_file "$name.by_geo" > "$name.by_geo.distribution"
 
     # Geo-to-ISO conversion
     ./carbon_client.py --convert-latlon-to-carbon-region --routes_file "$file" > "$name".by_iso

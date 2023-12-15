@@ -55,6 +55,11 @@ awk -F '\t' '{print $1}' routes.aws.us-west-1.us-east-1.by_geo.physical > routes
 ./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
 ```
 
+- To include the detailed fiber information when exporting geo-coordinate, we can run:
+```Shell
+./distribution.routes.py --export-routes-distribution --include hop_count distance_km fiber_wkt_paths fiber_types --physical-routes-tsv routes.aws.us-west-1.us-east-1.by_geo.physical --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
+```
+
 ### All region pairs (batch execution)
 
 We created a [batch execution script](./run_all.itdk_links.sh) to loop through all the region pairs that we're interested in and run Dijkstra's in parallel across multiple machines.
