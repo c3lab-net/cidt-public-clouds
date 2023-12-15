@@ -65,7 +65,7 @@ class PhysicalRoute:
         ])
 
 session = requests_cache.CachedSession('igdb_cache', backend='filesystem')
-IGDB_API_URL = 'http://localhost:8082'
+IGDB_API_URL = 'http://localhost:8083'
 
 def load_fiber_wkt_paths(fiber_wkt_paths: str) -> MultiLineString:
     try:
