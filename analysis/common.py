@@ -25,6 +25,8 @@ RouteInISO = list[str]
 class RouteMetric(str, Enum):
     HopCount = 'hop_count'
     DistanceKM = 'distance_km'
+    FiberWktPaths = 'fiber_wkt_paths'
+    FiberTypes = 'fiber_types'
 
     def __str__(self) -> str:
         return self.value

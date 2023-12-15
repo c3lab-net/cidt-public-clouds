@@ -50,6 +50,7 @@ awk -F '\t' '{print $1}' routes.aws.us-west-1.us-east-1.by_geo.physical > routes
 - Finally, we can export the distribution of geo-coordinates or ISOs for easy lookup later (e.g. in a database).
 ```Shell
 # (optionally, include additional metrics and remove duplicate consecutive hops) --include hop_count distance_km --remove-duplicate-consecutive-hops
+# (optionally, include iGDB route fiber information using earlier files) --include fiber_wkt_paths fiber_types --physical-routes-tsv routes.aws.us-west-1.us-east-1.by_geo.physical
 ./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
 ./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
 ```
