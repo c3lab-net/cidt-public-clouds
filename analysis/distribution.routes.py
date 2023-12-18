@@ -11,26 +11,12 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from common import RouteMetric, calculate_route_metric, get_routes_from_file, init_logging
+from common import RouteMetric, calculate_route_metric, get_routes_from_file, init_logging, remove_duplicate_consecutive_hops
 
 PHYSICAL_ROUTE_REQUIRED_METRICS = [
     RouteMetric.FiberWktPaths,
     RouteMetric.FiberTypes,
 ]
-
-def remove_duplicate_consecutive_hops(route: list[Any]):
-    prev_hop = None
-    i = 0
-    # Keep at least 2 hops, aka source and destination.
-    while i < len(route):
-        hop = route[i]
-        if hop == prev_hop:
-            del route[i]
-        else:
-            prev_hop = hop
-            i += 1
-    if len(route) == 1:
-        route.append(route[0])
 
 def load_physical_routes_tsv(physical_routes_file: io.TextIOWrapper) -> dict[str, dict]:
     physical_route_info = {}

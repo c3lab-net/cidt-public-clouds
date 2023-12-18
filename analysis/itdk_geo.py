@@ -11,7 +11,7 @@ import traceback
 from typing import Callable, Optional
 import pandas as pd
 
-from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping
+from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
 from carbon_client import get_carbon_region_from_coordinate
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo') -> pd.DataFrame:
@@ -46,6 +46,7 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
                                      node_ip_to_id: dict[str, str],
                                      node_geo_df: pd.DataFrame,
                                      is_valid_route: Callable[[RouteInCoordinate], bool],
+                                     should_remove_duplicate_consecutive_hops: bool,
                                      output_file: Optional[str]) -> list[RouteInCoordinate]:
     logging.info('Converting valid routes from IPs to lat/lons ...')
     converted_routes: list[RouteInCoordinate] = []
@@ -79,6 +80,9 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
         # Check if the route is valid
         if not is_valid_route(coordinates):
             continue
+
+        if should_remove_duplicate_consecutive_hops:
+            remove_duplicate_consecutive_hops(coordinates)
 
         # Append the converted route to the result
         print(coordinates, file=output if output else sys.stdout)
@@ -142,6 +146,8 @@ def parse_args():
                         help='Filter the routes by ground truth geo coordinates.')
     parser.add_argument('--geo-coordinate-ground-truth-csv', type=argparse.FileType('r'),
                         help='The CSV file containing the ground truth geo coordinates.')
+    parser.add_argument('--remove-duplicate-consecutive-hops', action='store_true',
+                        help='Remove duplicate consecutive hops from the routes.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
     parser.add_argument('--src-region', required=False, help='The source region')
@@ -213,6 +219,7 @@ def main():
             routes = get_routes_from_file(routes_file)
             convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
                                              check_route_by_ground_truth,
+                                             args.remove_duplicate_consecutive_hops,
                                              output_file)
     else:
         raise ValueError('No action specified')
