@@ -2,6 +2,7 @@
 
 import argparse
 from dataclasses import dataclass
+import functools
 import io
 import logging
 import math
@@ -116,6 +117,7 @@ def validate_start_end_offset(logical_route: LogicalRoute, physical_route: Physi
     assert start_offset_km < DISTANCE_THRESHOLD_KM, 'Start offset is too large: %f km' % start_offset_km
     assert end_offset_km < DISTANCE_THRESHOLD_KM, 'End offset is too large: %f km' % end_offset_km
 
+@functools.cache
 def convert_logical_route_to_physical_route(logical_route: LogicalRoute) -> PhysicalRoute:
     logging.info('Converting logical route %s ...', logical_route)
     physical_route: PhysicalRoute = PhysicalRoute([], 0, MultiLineString([]), [])
@@ -129,7 +131,7 @@ def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRo
                                                   output: Optional[io.TextIOWrapper]) -> None:
     for logical_route in logical_routes:
         try:
-            physical_route = convert_logical_route_to_physical_route(logical_route)
+            physical_route = convert_logical_route_to_physical_route(tuple(logical_route))
             print(physical_route.to_tsv(), file=output if output else sys.stdout)
         except AssertionError as ex:
             logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
