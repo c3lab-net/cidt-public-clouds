@@ -128,8 +128,12 @@ def convert_logical_route_to_physical_route(logical_route: LogicalRoute) -> Phys
 def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRoute],
                                                   output: Optional[io.TextIOWrapper]) -> None:
     for logical_route in logical_routes:
-        physical_route = convert_logical_route_to_physical_route(logical_route)
-        print(physical_route.to_tsv(), file=output if output else sys.stdout)
+        try:
+            physical_route = convert_logical_route_to_physical_route(logical_route)
+            print(physical_route.to_tsv(), file=output if output else sys.stdout)
+        except AssertionError as ex:
+            logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
+            logging.error(traceback.format_exc())
 
 def parse_args():
     parser = argparse.ArgumentParser()
