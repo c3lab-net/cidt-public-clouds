@@ -14,7 +14,7 @@ from shapely import wkt
 from shapely.geometry import MultiLineString
 from geopy.distance import geodesic
 
-from common import get_routes_from_file, init_logging
+from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging
 
 Coordinate=tuple[float, float]
 LogicalRoute=list[Coordinate]
@@ -76,7 +76,8 @@ def load_fiber_wkt_paths(fiber_wkt_paths: str) -> MultiLineString:
         logging.error(traceback.format_exc())
         raise AssertionError('Invalid fiber_wkt_paths %s: %s' % (fiber_wkt_paths, ex))
 
-def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> PhysicalRoute:
+def get_igdb_physical_hops(src: Coordinate, dst: Coordinate,
+                           src_cloud: str, dst_cloud: str) -> PhysicalRoute:
     """Get the physical hops between two coordinates using iGDB, inclusive of both ends."""
     (src_lat, src_lon) = src
     (dst_lat, dst_lon) = dst
@@ -85,6 +86,8 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate) -> PhysicalRoute:
         'src_longitude': src_lon,
         'dst_latitude': dst_lat,
         'dst_longitude': dst_lon,
+        'src_cloud': src_cloud,
+        'dst_cloud': dst_cloud,
     })
     assert response.ok, "iGDB physical hops lookup failed for %s -> %s (%d): %s" % \
         (src, dst, response.status_code, response.text)
@@ -118,20 +121,25 @@ def validate_start_end_offset(logical_route: LogicalRoute, physical_route: Physi
     assert end_offset_km < DISTANCE_THRESHOLD_KM, 'End offset is too large: %f km' % end_offset_km
 
 @functools.cache
-def convert_logical_route_to_physical_route(logical_route: LogicalRoute) -> PhysicalRoute:
+def convert_logical_route_to_physical_route(logical_route: LogicalRoute,
+                                            src_cloud: str,
+                                            dst_cloud: str) -> PhysicalRoute:
     logging.info('Converting logical route %s ...', logical_route)
     physical_route: PhysicalRoute = PhysicalRoute([], 0, MultiLineString([]), [])
     for i in range(len(logical_route) - 1):
-        intermediate_hops = get_igdb_physical_hops(logical_route[i], logical_route[i + 1])
+        intermediate_hops = get_igdb_physical_hops(logical_route[i], logical_route[i + 1],
+                                                   src_cloud, dst_cloud)
         physical_route.extend(intermediate_hops)
     validate_start_end_offset(logical_route, physical_route)
     return physical_route
 
 def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRoute],
+                                                  src_cloud: str,
+                                                  dst_cloud: str,
                                                   output: Optional[io.TextIOWrapper]) -> None:
     for logical_route in logical_routes:
         try:
-            physical_route = convert_logical_route_to_physical_route(tuple(logical_route))
+            physical_route = convert_logical_route_to_physical_route(tuple(logical_route), src_cloud, dst_cloud)
             print(physical_route.to_tsv(), file=output if output else sys.stdout)
         except AssertionError as ex:
             logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
@@ -143,10 +151,23 @@ def parse_args():
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='The output file.')
     parser.add_argument('--convert-to-physical-hops', action='store_true',
                         help='Convert the routes from logical hops to physical hops using iGDB dataset.')
+    parser.add_argument('--src-cloud', required=False, help='The source cloud')
+    parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
     args = parser.parse_args()
 
     if not args.convert_to_physical_hops:
         parser.error('No action requested.')
+
+    if not args.src_cloud and not args.dst_cloud:
+        cloud_regions = detect_cloud_regions_from_filename(args.routes_file)
+        if cloud_regions:
+            (args.src_cloud, args.src_region, args.dst_cloud, args.dst_region) = cloud_regions
+        else:
+            parser.error('Either src_cloud or dst_cloud is required.')
+    elif args.src_cloud and args.dst_cloud:
+        pass
+    else:
+        parser.error('Both src_cloud and dst_cloud are required.')
 
     return args
 
@@ -155,7 +176,10 @@ def main():
     args = parse_args()
     if args.convert_to_physical_hops:
         logical_routes = get_routes_from_file(args.routes_file)
-        convert_all_logical_routes_to_physical_routes(logical_routes, args.output)
+        convert_all_logical_routes_to_physical_routes(logical_routes,
+                                                      args.src_cloud,
+                                                      args.dst_cloud,
+                                                      args.output)
     else:
         raise ValueError('No action specified')
 
