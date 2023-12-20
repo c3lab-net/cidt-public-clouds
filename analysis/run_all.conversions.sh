@@ -15,6 +15,8 @@ process_region_by_geo()
     name="$1"
     echo "Processing $name ..."
 
+    set -e
+
     # Call iGDB to convert logical hops to physical hops
     mv $name.by_geo $name.by_geo.logical
     ./igdb_client.py --convert-to-physical-hops --routes_file $name.by_geo.logical -o $name.by_geo.physical
@@ -38,6 +40,8 @@ process_region_by_geo()
     chmod 440 "$name.by_geo."{logical,physical} "$name.by_geo.distribution" $name.by_iso $name.by_iso.distribution
 }
 
+export -f process_region_by_geo
+
 for file in routes.*.by_geo; do
     name="$(basename "$file" ".by_geo")"
     if [ -f "$name.by_iso.distribution" ]; then
@@ -45,9 +49,11 @@ for file in routes.*.by_geo; do
         continue
     fi
 
-    # Optionally, you can run this in parallel.
-    process_region_by_geo "$name"
-done
+    echo "$name"
+    # If you don't have GNU `parallel`, you can remove the pipe after `done` use this instead:
+    # process_region_by_geo "$name"
+done | parallel -j $(nproc) process_region_by_geo {}
+
 
 mkdir region_pair.by_geo region_pair.by_geo.distribution region_pair.by_iso region_pair.by_iso.distribution
 mv routes.*.by_geo{,.logical,.physical} region_pair.by_geo/
