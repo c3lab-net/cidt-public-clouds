@@ -27,7 +27,15 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - We next convert each IP address to a (lat, long) geocoordinate using the ITDK `.nodes.geo` database:
 ```Shell
+# (optionally, remove duplicate consecutive hops) --remove-duplicate-consecutive-hops
 ./itdk_geo.py --convert-ip-to-latlon --routes_file routes.aws.us-west-1.us-east-1.by_ip 1> routes.aws.us-west-1.us-east-1.by_geo
+```
+
+- (Supplemental) We can further improve the accuracy of the traceroute-level dataset by querying iGDB dataset, provided by an external program.
+```Shell
+mv routes.aws.us-west-1.us-east-1.by_geo routes.aws.us-west-1.us-east-1.by_geo.logical
+./igdb_client.py --convert-to-physical-hops --routes_file routes.aws.us-west-1.us-east-1.by_geo.logical -o routes.aws.us-west-1.us-east-1.by_geo.physical
+awk -F '\t' '{print $1}' routes.aws.us-west-1.us-east-1.by_geo.physical > routes.aws.us-west-1.us-east-1.by_geo
 ```
 
 - (Optional) We can visualize the routes using the plot script:
@@ -42,9 +50,15 @@ This produces a file that contains one route on each line, for each source IP, a
 
 - Finally, we can export the distribution of geo-coordinates or ISOs for easy lookup later (e.g. in a database).
 ```Shell
-# (optionally, include additional metrics and remove duplicate consecutive hops) --include hop_count distance_km --remove-duplicate-consecutive-hops
+# (optionally, include additional metrics) --include hop_count distance_km
+# (optionally, further include iGDB route fiber information using earlier files) --include fiber_wkt_paths fiber_types --physical-routes-tsv routes.aws.us-west-1.us-east-1.by_geo.physical
 ./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
 ./distribution.routes.py --export-routes-distribution --routes_file routes.aws.us-west-1.us-east-1.by_iso > routes.aws.us-west-1.us-east-1.by_iso.distribution
+```
+
+- To include the detailed fiber information when exporting geo-coordinate, we can run:
+```Shell
+./distribution.routes.py --export-routes-distribution --include hop_count distance_km fiber_wkt_paths fiber_types --physical-routes-tsv routes.aws.us-west-1.us-east-1.by_geo.physical --routes_file routes.aws.us-west-1.us-east-1.by_geo > routes.aws.us-west-1.us-east-1.by_geo.distribution
 ```
 
 ### All region pairs (batch execution)

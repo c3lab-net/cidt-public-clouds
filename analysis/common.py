@@ -10,7 +10,7 @@ import re
 import sys
 import time
 import logging
-from typing import Optional
+from typing import Any, Optional
 from geopy.distance import geodesic
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
@@ -25,6 +25,8 @@ RouteInISO = list[str]
 class RouteMetric(str, Enum):
     HopCount = 'hop_count'
     DistanceKM = 'distance_km'
+    FiberWktPaths = 'fiber_wkt_paths'
+    FiberTypes = 'fiber_types'
 
     def __str__(self) -> str:
         return self.value
@@ -132,6 +134,21 @@ def write_routes_to_file(routes: list[list], output_file: Optional[str] = None) 
     if output:
         output.close()
         logging.info('Done')
+
+def remove_duplicate_consecutive_hops(route: list[Any]):
+    """Remove duplicate consecutive hops from the route in-place."""
+    prev_hop = None
+    i = 0
+    # Keep at least 2 hops, aka source and destination.
+    while i < len(route):
+        hop = route[i]
+        if hop == prev_hop:
+            del route[i]
+        else:
+            prev_hop = hop
+            i += 1
+    if len(route) == 1:
+        route.append(route[0])
 
 def detect_cloud_regions_from_filename(filename: str) -> Optional[tuple[str, str, str, str]]:
     """Parse the filename and return a 4-item tuple (src_cloud, src_region, dst_cloud, dst_region)."""
