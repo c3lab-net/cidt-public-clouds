@@ -57,16 +57,24 @@ class PhysicalRoute:
                 (self.routers_latlon[-1], other.routers_latlon[0])
         # intermediate hops can get a redirect router hop, i.e. this[-2] = closest city, this[-1] = logical stop,
         #   other[0] = logical stop, and other[1] = closest city = this[-2]. In that case, we need to remove the intermediate hop (last of self, and first of other), and adjust the fiber paths and distances accordingly.
-        if geodesic(self.routers_latlon[-2], other.routers_latlon[1]).km < THRESHOLD_CONSECUTIVE_HOPS_KM:
-            logging.info(f'Removing extra detour stop via {self.routers_latlon[-2]} to {self.routers_latlon[-1]}')
-            self.routers_latlon = self.routers_latlon[:-1] + other.routers_latlon[2:]
-            # Remove last fiber path of self and first fiber path of other.
+        THRESHOLD_INTERMEDIATE_REDIRECT_KM = 100
+        remove_direct_hop = False
+        if len(self.routers_latlon) > 2 and len(other.routers_latlon) > 2 and \
+                geodesic(self.routers_latlon[-2], other.routers_latlon[1]).km < THRESHOLD_CONSECUTIVE_HOPS_KM:
             self_extra_hop_distance_km = geodesic(
                 lonlat(*self.fiber_wkt_paths.geoms[-1].coords[0]),
                 lonlat(*self.fiber_wkt_paths.geoms[-1].coords[-1])).km
             other_extra_hop_distance_km = geodesic(
                 lonlat(*other.fiber_wkt_paths.geoms[0].coords[0]),
                 lonlat(*other.fiber_wkt_paths.geoms[0].coords[-1])).km
+            if math.isclose(self_extra_hop_distance_km, other_extra_hop_distance_km) and \
+                    self_extra_hop_distance_km < THRESHOLD_INTERMEDIATE_REDIRECT_KM:
+                remove_direct_hop = True
+        if remove_direct_hop:
+            logging.info(f'Removing extra detour stop via {self.routers_latlon[-2]} '
+                         f'to {self.routers_latlon[-1]} of length {self_extra_hop_distance_km:.2f}km')
+            # Remove last fiber path of self and first fiber path of other.
+            self.routers_latlon = self.routers_latlon[:-1] + other.routers_latlon[2:]
             self.distance_km = (self.distance_km - self_extra_hop_distance_km) + \
                                 (other.distance_km - other_extra_hop_distance_km)
             self.fiber_wkt_paths = MultiLineString(list(self.fiber_wkt_paths.geoms)[:-1] + \
