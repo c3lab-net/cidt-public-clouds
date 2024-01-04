@@ -9,6 +9,7 @@ import os
 import sys
 import traceback
 from typing import Callable, Optional
+import numpy as np
 import pandas as pd
 
 from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
@@ -34,7 +35,9 @@ def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.
 
     node_geo_df = pd.read_csv(node_geo_filename, sep='\t', comment='#', index_col='node_id',
                               names=columns, dtype=column_dtypes, usecols=usecols,
-                              converters={'node_id': converter_node_id })
+                              converters={ 'node_id': converter_node_id }, keep_default_na=False)
+    assert not node_geo_df.index.has_duplicates, f'node.geo dataframe has duplicate index on node id! ' \
+            f'Count = {np.count_nonzero(node_geo_df.index.duplicated())}'
     logging.info(f'Loaded {len(node_geo_df)} entries from {node_geo_filename}.')
     return node_geo_df
 
