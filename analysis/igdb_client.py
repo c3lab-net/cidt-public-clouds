@@ -119,6 +119,7 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate,
         'dst_longitude': dst_lon,
         'src_cloud': src_cloud,
         'dst_cloud': dst_cloud,
+        'search_for_nearby_as_locations': True,
     })
     assert response.ok, "iGDB physical hops lookup failed for %s -> %s (%d): %s" % \
         (src, dst, response.status_code, response.text)
