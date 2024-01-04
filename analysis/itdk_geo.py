@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from abc import ABC, abstractmethod
 import argparse
 import csv
 import functools
@@ -45,9 +46,81 @@ def get_node_ids_with_geo_coordinates() -> list[str]:
     node_geo_df = parse_node_geo_as_dataframe()
     return node_geo_df.index.tolist()
 
+class IpToGeoConverter(ABC):
+    class LowGeoPrecisionException(Exception):
+        pass
+
+    class IpNotFoundException(Exception):
+        pass
+
+    @abstractmethod
+    def convert(self, ip: str) -> Coordinate:
+        pass
+
+class MaxmindIpToGeoConverter(IpToGeoConverter):
+    def __init__(self, db_path: str, accuracy_radius_threshold: float) -> None:
+        """Initialize a maxmind database for ip-to-geo conversion,
+            with valid conversion capped at the given accuracy radius threshold."""
+        logging.info(f'Using maxmind {db_path} for ip-to-geo conversion '
+                     f'(max accuracy radius = {accuracy_radius_threshold}) ...')
+        import geoip2.database
+        self.reader = geoip2.database.Reader(db_path)
+        self.accuracy_radius_threshold = accuracy_radius_threshold
+
+    def __del__(self):
+        self.reader.close()
+
+    def convert(self, ip: str) -> Coordinate:
+        try:
+            city = self.reader.city(ip)
+        except Exception as ex:
+            logging.warning(f'Failed to find city with ip={ip}: {ex}')
+            raise IpToGeoConverter.IpNotFoundException()
+        location = city.location
+        if location.latitude is None or location.longitude is None:
+            logging.warning(f'Location of {ip} does not have latitude or longitude')
+            raise IpToGeoConverter.IpNotFoundException()
+        coordinate = (location.latitude, location.longitude)
+        if not location.accuracy_radius or location.accuracy_radius > self.accuracy_radius_threshold:
+            logging.debug(f'Location {coordinate} has high accuracy radius of {location.accuracy_radius}')
+            raise IpToGeoConverter.LowGeoPrecisionException()
+        return coordinate
+
+class ItdkIpToGeoConverter(IpToGeoConverter):
+    def __init__(self) -> None:
+        logging.info('Using ITDK nodes and geo dataset for ip-to-geo conversion ...')
+        self.node_ip_to_id = load_itdk_node_ip_to_id_mapping()
+        self.node_geo_df = parse_node_geo_as_dataframe()
+        self.d_no_city_coordinates_to_node_ids: dict[Coordinate, list[str]] = {}
+
+    def convert(self, ip: str) -> Coordinate:
+        node_id = self.node_ip_to_id.get(ip, '')
+        if not node_id:
+            logging.warning(f'Ignoring unknown node with ip {ip}')
+            raise IpToGeoConverter.IpNotFoundException()
+        if node_id not in self.node_geo_df.index:
+            logging.error(f'Node ID {node_id} not found in node_geo_df')
+            raise IpToGeoConverter.IpNotFoundException()
+        row = self.node_geo_df.loc[node_id]
+        latitude = row['lat']
+        longitude = row['long']
+        coordinate = (latitude, longitude)
+        if not row['city']:
+            if coordinate not in self.d_no_city_coordinates_to_node_ids:
+                self.d_no_city_coordinates_to_node_ids[coordinate] = []
+            self.d_no_city_coordinates_to_node_ids[coordinate].append(node_id)
+            # Temporary measure to ignore intermediate hop that likely has large accuracy radius
+            #   These are known coordinates without city info and leads to problems.
+            LOW_PRECISION_COORDINATES = [
+                (37.751, -97.822),
+                (59.3247, 18.056),
+            ]
+            if coordinate in LOW_PRECISION_COORDINATES:
+                raise IpToGeoConverter.LowGeoPrecisionException()
+        return coordinate
+
 def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
-                                     node_ip_to_id: dict[str, str],
-                                     node_geo_df: pd.DataFrame,
+                                     ip_to_geo: IpToGeoConverter,
                                      is_valid_route: Callable[[RouteInCoordinate], bool],
                                      should_remove_duplicate_consecutive_hops: bool,
                                      output_file: Optional[str]) -> list[RouteInCoordinate]:
@@ -60,43 +133,19 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
     else:
         output = None
 
-    d_no_city_coordinates_to_node_ids: dict[Coordinate, list[str]] = {}
-
-    def _convert_ip_address_to_coordinate(ip_address) -> Optional[Coordinate]:
-        node_id = node_ip_to_id.get(ip_address, '')
-        if not node_id:
-            logging.warning(f'Ignoring unknown node with ip {ip_address}')
-            return None
-        if node_id not in node_geo_df.index:
-            logging.error(f'Node ID {node_id} not found in node_geo_df')
-            return None
-        row = node_geo_df.loc[node_id]
-        latitude = row['lat']
-        longitude = row['long']
-        coordinate = (latitude, longitude)
-        if not row['city']:
-            if coordinate not in d_no_city_coordinates_to_node_ids:
-                d_no_city_coordinates_to_node_ids[coordinate] = []
-            d_no_city_coordinates_to_node_ids[coordinate].append(node_id)
-        return coordinate
-
     for ip_addresses in routes:
         # Convert node IDs to latitude and longitude using the node_geo_df dictionary
         coordinates: list[Coordinate] = []
         for i in range(len(ip_addresses)):
             ip_address = ip_addresses[i]
-            coordinate = _convert_ip_address_to_coordinate(ip_address)
-            if not coordinate:
-                coordinates = []
+            try:
+                coordinate = ip_to_geo.convert(ip_address)
+            except IpToGeoConverter.IpNotFoundException:
+                logging.warning(f'IP {ip_address} not found, ignoring route!')
                 break
-            # Temporary measure to ignore intermediate hop that likely has large accuracy radius
-            #   These are known coordinates without city info and leads to problems.
-            LOW_PRECISION_COORDINATES = [
-                (37.751, -97.822),
-                (59.3247, 18.056),
-            ]
-            if i > 0 and i < len(ip_addresses) - 1 and coordinate in LOW_PRECISION_COORDINATES:
-                continue
+            except IpToGeoConverter.LowGeoPrecisionException:
+                logging.warning(f'IP {ip_address} has low-precision coordinate, ignoring route!')
+                break
             coordinates.append(coordinate)
 
         # If some nodes failed to convert, we ignore the route
@@ -124,9 +173,10 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
 
     logging.info('Converted/Total: %d/%d', len(converted_routes), len(routes))
 
-    logging.debug('Empty city coordinates:')
-    for coordinate, node_ids in d_no_city_coordinates_to_node_ids.items():
-        logging.debug(f'{coordinate} ({len(node_ids)}): {" ".join(node_ids)}')
+    if isinstance(ip_to_geo, ItdkIpToGeoConverter):
+        logging.info('Empty city coordinates:')
+        for coordinate, node_ids in ip_to_geo.d_no_city_coordinates_to_node_ids.items():
+            logging.info(f'{coordinate} ({len(node_ids)}): {" ".join(node_ids)}')
 
     return converted_routes
 
@@ -188,6 +238,9 @@ def parse_args():
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
     parser.add_argument('--src-region', required=False, help='The source region')
     parser.add_argument('--dst-region', required=False, help='The destination region')
+    parser.add_argument('--maxmind-database', type=str, help='Path to maxmind database to read directly')
+    parser.add_argument('--accuracy-radius-threshold', type=float, help='Maximum accuracy redius to accept a coordinate')
+
     args = parser.parse_args()
 
     if args.outputs is not None and len(args.outputs) not in [0, len(args.routes_files)]:
@@ -216,14 +269,25 @@ def parse_args():
             if not args.dst_region:
                 parser.error('--dst-region must be specified when --filter-geo-coordinate-by-ground-truth is specified')
 
+    if args.maxmind_database:
+        if not os.path.exists(args.maxmind_database):
+            parser.error(f'Maxmind database {args.maxmind_database} not found!')
+        if not args.accuracy_radius_threshold:
+            parser.error('--accuracy-radius-threshold must be specified when --maxmind-database is sepcified')
+
+    if args.accuracy_radius_threshold and not args.maxmind_database:
+        parser.error('--maxmind-database must be specified when --accuracy-radius-threshold is sepcified')
+
     return args
 
 def main():
     init_logging(level=logging.INFO)
     args = parse_args()
     if args.convert_ip_to_latlon:
-        node_ip_to_id = load_itdk_node_ip_to_id_mapping()
-        node_geo_df = parse_node_geo_as_dataframe()
+        if args.maxmind_database:
+            ip_to_geo_converter = MaxmindIpToGeoConverter(args.maxmind_database, args.accuracy_radius_threshold)
+        else:
+            ip_to_geo_converter = ItdkIpToGeoConverter()
         geo_coordinate_ground_truth = \
             load_region_to_geo_coordinate_ground_truth(args.geo_coordinate_ground_truth_csv) \
             if args.filter_geo_coordinate_by_ground_truth else {}
@@ -253,7 +317,7 @@ def main():
             # Convert routes
             logging.info(f'Converting routes from {routes_file} to {output_file if output_file else "stdout"} ...')
             routes = get_routes_from_file(routes_file)
-            convert_routes_from_ip_to_latlon(routes, node_ip_to_id, node_geo_df,
+            convert_routes_from_ip_to_latlon(routes, ip_to_geo_converter,
                                              check_route_by_ground_truth,
                                              args.remove_duplicate_consecutive_hops,
                                              output_file)
