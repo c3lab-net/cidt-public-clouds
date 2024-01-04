@@ -9,6 +9,10 @@ We use this dataset to reconstruct the Internet router connectivity graph and fr
 
 The ITDK dataset we use is from the 2022-03 release. More info on this dataset can be found in the [caida-itdk](./caida-itdk/) directory.
 
+### [Maxmind](./maxmind/)
+Maxmind is a commericial IP-to-geolocation database and we use the lite version from https://dev.maxmind.com/geoip/geolite2-free-geolocation-data.
+Download the database and extract the `.mmdb` file into [`maxmind`](./maxmind/) directory. It's named `GeoLite2-City.mmdb` in our case; if it's different, you may need to adjust the filename in the run scripts.
+
 ### [Public cloud info](./cloud/)
 
 #### IP ranges
