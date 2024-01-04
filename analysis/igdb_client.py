@@ -95,7 +95,7 @@ class PhysicalRoute:
             '|'.join(self.fiber_types),
         ])
 
-session = requests_cache.CachedSession('igdb_cache', backend='filesystem', allowable_codes=(200, 400))
+igdb_session = None
 IGDB_API_URL = 'http://localhost:8083'
 
 def load_fiber_wkt_paths(fiber_wkt_paths: str) -> MultiLineString:
@@ -111,7 +111,8 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate,
     """Get the physical hops between two coordinates using iGDB, inclusive of both ends."""
     (src_lat, src_lon) = src
     (dst_lat, dst_lon) = dst
-    response = session.get(f'{IGDB_API_URL}/physical-route/', params={
+    assert igdb_session is not None
+    response = igdb_session.get(f'{IGDB_API_URL}/physical-route/', params={
         'src_latitude': src_lat,
         'src_longitude': src_lon,
         'dst_latitude': dst_lat,
@@ -177,6 +178,16 @@ def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRo
     if output:
         output.close()
 
+def init_igdb_api_cache(preserve_cache: bool):
+    global igdb_session
+    if preserve_cache:
+        cache_name = 'igdb_cache'
+        backend = 'filesystem'
+    else:
+        cache_name = 'igdb_cache.ram'
+        backend='memory'
+    igdb_session = requests_cache.CachedSession(cache_name, backend=backend, allowable_codes=(200, 400))
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--routes_file', type=str, help='The logical routes file, each line contains a list of (lat, long) coordinates and represents a route.')
@@ -185,6 +196,8 @@ def parse_args():
                         help='Convert the routes from logical hops to physical hops using iGDB dataset.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
+    parser.add_argument('--preserve-igdb-api-cache', action='store_true',
+                        help='Whether to preserve on disk the iGDB API calls')
     args = parser.parse_args()
 
     if not args.convert_to_physical_hops:
@@ -206,6 +219,7 @@ def parse_args():
 def main():
     init_logging(level=logging.INFO)
     args = parse_args()
+    init_igdb_api_cache(args.preserve_igdb_api_cache)
     if args.convert_to_physical_hops:
         logical_routes = get_routes_from_file(args.routes_file)
         convert_all_logical_routes_to_physical_routes(logical_routes,

@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 set -e
 
 # IP-to-geo conversion
-./itdk_geo.py --convert-ip-to-latlon --remove-duplicate-consecutive-hops --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --routes_file region_pair.by_ip/routes.*.by_ip --outputs
+./itdk_geo.py --convert-ip-to-latlon --remove-duplicate-consecutive-hops --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --preserve-igdb-api-cache --routes_file region_pair.by_ip/routes.*.by_ip --outputs
 chmod 440 routes.*.by_geo
 
 process_region_by_geo()
