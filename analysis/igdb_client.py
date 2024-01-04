@@ -174,6 +174,8 @@ def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRo
         except AssertionError as ex:
             logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
             logging.error(traceback.format_exc())
+    if output:
+        output.close()
 
 def parse_args():
     parser = argparse.ArgumentParser()
