@@ -6,7 +6,6 @@
 /analysis/*.txt
 /analysis/*.png
 /analysis/matched_nodes.*.txt
-/data/caida-itdk/data/
 /data/cloud/ip-prefixes/
 /data/cloud/traceroutes/
 
