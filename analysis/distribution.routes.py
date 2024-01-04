@@ -99,6 +99,7 @@ def parse_args():
 
 def main():
     init_logging(level=logging.INFO)
+    csv.field_size_limit(sys.maxsize)
     args = parse_args()
 
     if args.export_routes_distribution:

@@ -9,6 +9,7 @@ import os
 import sys
 import traceback
 from typing import Callable, Optional
+import numpy as np
 import pandas as pd
 
 from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
@@ -34,7 +35,9 @@ def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.
 
     node_geo_df = pd.read_csv(node_geo_filename, sep='\t', comment='#', index_col='node_id',
                               names=columns, dtype=column_dtypes, usecols=usecols,
-                              converters={'node_id': converter_node_id })
+                              converters={ 'node_id': converter_node_id }, keep_default_na=False)
+    assert not node_geo_df.index.has_duplicates, f'node.geo dataframe has duplicate index on node id! ' \
+            f'Count = {np.count_nonzero(node_geo_df.index.duplicated())}'
     logging.info(f'Loaded {len(node_geo_df)} entries from {node_geo_filename}.')
     return node_geo_df
 
@@ -56,25 +59,53 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
         logging.info(f'Writing (lat, lon) routes to {output_file} ...')
     else:
         output = None
-    for ip_addresses in routes:
-        # Convert each IP address to a node ID using the node_ip_to_id dictionary
-        node_ids = [node_ip_to_id.get(ip, '') for ip in ip_addresses]
 
+    d_no_city_coordinates_to_node_ids: dict[Coordinate, list[str]] = {}
+
+    def _convert_ip_address_to_coordinate(ip_address) -> Optional[Coordinate]:
+        node_id = node_ip_to_id.get(ip_address, '')
+        if not node_id:
+            logging.warning(f'Ignoring unknown node with ip {ip_address}')
+            return None
+        if node_id not in node_geo_df.index:
+            logging.error(f'Node ID {node_id} not found in node_geo_df')
+            return None
+        row = node_geo_df.loc[node_id]
+        latitude = row['lat']
+        longitude = row['long']
+        coordinate = (latitude, longitude)
+        if not row['city']:
+            if coordinate not in d_no_city_coordinates_to_node_ids:
+                d_no_city_coordinates_to_node_ids[coordinate] = []
+            d_no_city_coordinates_to_node_ids[coordinate].append(node_id)
+        return coordinate
+
+    for ip_addresses in routes:
         # Convert node IDs to latitude and longitude using the node_geo_df dictionary
         coordinates: list[Coordinate] = []
-        for node_id in node_ids:
-            if not node_id:
-                logging.warning(f'Ignoring unknown node with ip {ip_addresses}')
-                continue
-            if node_id not in node_geo_df.index:
-                logging.error(f'Node ID {node_id} not found in node_geo_df')
+        for i in range(len(ip_addresses)):
+            ip_address = ip_addresses[i]
+            coordinate = _convert_ip_address_to_coordinate(ip_address)
+            if not coordinate:
                 coordinates = []
                 break
-            row = node_geo_df.loc[node_id]
-            coordinates.append((row['lat'], row['long']))
+            # Temporary measure to ignore intermediate hop that likely has large accuracy radius
+            #   These are known coordinates without city info and leads to problems.
+            LOW_PRECISION_COORDINATES = [
+                (37.751, -97.822),
+                (59.3247, 18.056),
+            ]
+            if i > 0 and i < len(ip_addresses) - 1 and coordinate in LOW_PRECISION_COORDINATES:
+                continue
+            coordinates.append(coordinate)
+
+        # If some nodes failed to convert, we ignore the route
+        if len(coordinates) < len(ip_addresses):
+            continue
+
         # Route must have at least 2 hops, at src and dst.
         if len(coordinates) < 2:
-            logging.warning(f'Ignoring route with less than 2 hops: {ip_addresses}')
+            logging.warning(f'Ignoring route with less than 2 hops: {coordinates}')
             continue
 
         # Check if the route is valid
@@ -92,6 +123,11 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
         output.close()
 
     logging.info('Converted/Total: %d/%d', len(converted_routes), len(routes))
+
+    logging.debug('Empty city coordinates:')
+    for coordinate, node_ids in d_no_city_coordinates_to_node_ids.items():
+        logging.debug(f'{coordinate} ({len(node_ids)}): {" ".join(node_ids)}')
+
     return converted_routes
 
 def load_region_to_geo_coordinate_ground_truth(geo_coordinate_ground_truth_csv: io.TextIOWrapper) -> \

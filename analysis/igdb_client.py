@@ -12,7 +12,7 @@ from typing import Optional
 import requests_cache
 from shapely import wkt
 from shapely.geometry import MultiLineString
-from geopy.distance import geodesic
+from geopy.distance import geodesic, lonlat
 
 from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging
 
@@ -44,18 +44,48 @@ class PhysicalRoute:
     def extend(self, other):
         if not isinstance(other, PhysicalRoute):
             raise ValueError('Expect other to be a PhysicalRoute, but got %s' % other)
-        # Connect physical hops together, while removing the common intermediate hop
         if len(self.routers_latlon) == 0:
             self.routers_latlon.extend(other.routers_latlon)
-        else:
-            THRESHOLD_CONSECUTIVE_HOPS_KM = 5
-            assert geodesic(self.routers_latlon[-1], other.routers_latlon[0]).km < THRESHOLD_CONSECUTIVE_HOPS_KM, \
-                'Expect the last hop in self to be the same as the first hop in other, but got %s and %s' % \
-                    (self.routers_latlon[-1], other.routers_latlon[0])
+            self.distance_km = other.distance_km
+            self.fiber_wkt_paths = MultiLineString(other.fiber_wkt_paths.geoms)
+            self.fiber_types = list(other.fiber_types)
+            return
+        # Connect physical hops together, while removing the common intermediate router hop
+        THRESHOLD_CONSECUTIVE_HOPS_KM = 5
+        assert geodesic(self.routers_latlon[-1], other.routers_latlon[0]).km < THRESHOLD_CONSECUTIVE_HOPS_KM, \
+            'Expect the last hop in self to be the same as the first hop in other, but got %s and %s' % \
+                (self.routers_latlon[-1], other.routers_latlon[0])
+        # intermediate hops can get a redirect router hop, i.e. this[-2] = closest city, this[-1] = logical stop,
+        #   other[0] = logical stop, and other[1] = closest city = this[-2]. In that case, we need to remove the intermediate hop (last of self, and first of other), and adjust the fiber paths and distances accordingly.
+        THRESHOLD_INTERMEDIATE_REDIRECT_KM = 100
+        remove_direct_hop = False
+        if len(self.routers_latlon) > 2 and len(other.routers_latlon) > 2 and \
+                geodesic(self.routers_latlon[-2], other.routers_latlon[1]).km < THRESHOLD_CONSECUTIVE_HOPS_KM:
+            self_extra_hop_distance_km = geodesic(
+                lonlat(*self.fiber_wkt_paths.geoms[-1].coords[0]),
+                lonlat(*self.fiber_wkt_paths.geoms[-1].coords[-1])).km
+            other_extra_hop_distance_km = geodesic(
+                lonlat(*other.fiber_wkt_paths.geoms[0].coords[0]),
+                lonlat(*other.fiber_wkt_paths.geoms[0].coords[-1])).km
+            if math.isclose(self_extra_hop_distance_km, other_extra_hop_distance_km) and \
+                    self_extra_hop_distance_km < THRESHOLD_INTERMEDIATE_REDIRECT_KM:
+                remove_direct_hop = True
+        if remove_direct_hop:
+            logging.info(f'Removing extra detour stop via {self.routers_latlon[-2]} '
+                         f'to {self.routers_latlon[-1]} of length {self_extra_hop_distance_km:.2f}km')
+            # Remove last fiber path of self and first fiber path of other.
+            self.routers_latlon = self.routers_latlon[:-1] + other.routers_latlon[2:]
+            self.distance_km = (self.distance_km - self_extra_hop_distance_km) + \
+                                (other.distance_km - other_extra_hop_distance_km)
+            self.fiber_wkt_paths = MultiLineString(list(self.fiber_wkt_paths.geoms)[:-1] + \
+                                                    list(other.fiber_wkt_paths.geoms)[1:])
+            self.fiber_types = self.fiber_types[:-1] + other.fiber_types[1:]
+        else:   # Normal case, discard starting hop of other
             self.routers_latlon.extend(other.routers_latlon[1:])
-        self.distance_km += other.distance_km
-        self.fiber_wkt_paths = MultiLineString(list(self.fiber_wkt_paths.geoms) + list(other.fiber_wkt_paths.geoms))
-        self.fiber_types.extend(other.fiber_types)
+            self.distance_km += other.distance_km
+            self.fiber_wkt_paths = MultiLineString(list(self.fiber_wkt_paths.geoms) + \
+                                                    list(other.fiber_wkt_paths.geoms))
+            self.fiber_types.extend(other.fiber_types)
 
     def to_tsv(self):
         return '\t'.join([
@@ -65,7 +95,7 @@ class PhysicalRoute:
             '|'.join(self.fiber_types),
         ])
 
-session = requests_cache.CachedSession('igdb_cache', backend='filesystem')
+igdb_session = None
 IGDB_API_URL = 'http://localhost:8083'
 
 def load_fiber_wkt_paths(fiber_wkt_paths: str) -> MultiLineString:
@@ -81,13 +111,15 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate,
     """Get the physical hops between two coordinates using iGDB, inclusive of both ends."""
     (src_lat, src_lon) = src
     (dst_lat, dst_lon) = dst
-    response = session.get(f'{IGDB_API_URL}/physical-route/', params={
+    assert igdb_session is not None
+    response = igdb_session.get(f'{IGDB_API_URL}/physical-route/', params={
         'src_latitude': src_lat,
         'src_longitude': src_lon,
         'dst_latitude': dst_lat,
         'dst_longitude': dst_lon,
         'src_cloud': src_cloud,
         'dst_cloud': dst_cloud,
+        'search_for_nearby_as_locations': True,
     })
     assert response.ok, "iGDB physical hops lookup failed for %s -> %s (%d): %s" % \
         (src, dst, response.status_code, response.text)
@@ -144,6 +176,18 @@ def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRo
         except AssertionError as ex:
             logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
             logging.error(traceback.format_exc())
+    if output:
+        output.close()
+
+def init_igdb_api_cache(preserve_cache: bool):
+    global igdb_session
+    if preserve_cache:
+        cache_name = 'igdb_cache'
+        backend = 'filesystem'
+    else:
+        cache_name = 'igdb_cache.ram'
+        backend='memory'
+    igdb_session = requests_cache.CachedSession(cache_name, backend=backend, allowable_codes=(200, 400))
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -153,6 +197,8 @@ def parse_args():
                         help='Convert the routes from logical hops to physical hops using iGDB dataset.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
+    parser.add_argument('--preserve-igdb-api-cache', action='store_true',
+                        help='Whether to preserve on disk the iGDB API calls')
     args = parser.parse_args()
 
     if not args.convert_to_physical_hops:
@@ -174,6 +220,7 @@ def parse_args():
 def main():
     init_logging(level=logging.INFO)
     args = parse_args()
+    init_igdb_api_cache(args.preserve_igdb_api_cache)
     if args.convert_to_physical_hops:
         logical_routes = get_routes_from_file(args.routes_file)
         convert_all_logical_routes_to_physical_routes(logical_routes,

@@ -1,6 +1,7 @@
 /analysis/results/
 /analysis/*_cache/
 /analysis/*route*
+/analysis/region_pair.*
 !/analysis/*.py
 /analysis/*.txt
 /analysis/*.png
