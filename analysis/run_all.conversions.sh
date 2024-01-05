@@ -7,19 +7,20 @@ cd "$(dirname "$0")"
 set -e
 
 # IP-to-geo conversion
-./itdk_geo.py --convert-ip-to-latlon --remove-duplicate-consecutive-hops --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --preserve-igdb-api-cache --routes_file region_pair.by_ip/routes.*.by_ip --outputs
+./itdk_geo.py --convert-ip-to-latlon --remove-duplicate-consecutive-hops --filter-geo-coordinate-by-ground-truth --geo-coordinate-ground-truth-csv ./results/geo_distributions/geo_distribution.all.csv --routes_file region_pair.by_ip/routes.*.by_ip --outputs
 chmod 440 routes.*.by_geo
 
 process_region_by_geo()
 {
     name="$1"
-    echo "Processing $name ..."
+
+    echo >&2 "Processing $name ..."
 
     set -e
 
     # Call iGDB to convert logical hops to physical hops
     mv $name.by_geo $name.by_geo.logical
-    ./igdb_client.py --convert-to-physical-hops --routes_file $name.by_geo.logical -o $name.by_geo.physical
+    ./igdb_client.py --convert-to-physical-hops --preserve-igdb-api-cache --routes_file $name.by_geo.logical -o $name.by_geo.physical
     awk -F '\t' '{print $1}' $name.by_geo.physical > $name.by_geo
 
     # Geo distribution
@@ -53,7 +54,6 @@ for file in routes.*.by_geo; do
     # If you don't have GNU `parallel`, you can remove the pipe after `done` use this instead:
     # process_region_by_geo "$name"
 done | parallel -j $(nproc) process_region_by_geo {}
-
 
 mkdir region_pair.by_geo region_pair.by_geo.distribution region_pair.by_iso region_pair.by_iso.distribution
 mv routes.*.by_geo{,.logical,.physical} region_pair.by_geo/
