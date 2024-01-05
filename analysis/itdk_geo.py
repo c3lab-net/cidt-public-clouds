@@ -141,16 +141,17 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
             try:
                 coordinate = ip_to_geo.convert(ip_address)
             except IpToGeoConverter.IpNotFoundException:
-                logging.warning(f'IP {ip_address} not found, ignoring route!')
+                logging.warning(f'IP {ip_address} not found, ignoring hop!')
                 break
             except IpToGeoConverter.LowGeoPrecisionException:
-                logging.warning(f'IP {ip_address} has low-precision coordinate, ignoring route!')
+                logging.warning(f'IP {ip_address} has low-precision coordinate, ignoring hop!')
                 break
             coordinates.append(coordinate)
 
-        # If some nodes failed to convert, we ignore the route
-        if len(coordinates) < len(ip_addresses):
-            continue
+        # This can cause all routes to be ignored in certain cases. Instead, we'll just silently ignore the hop
+        # # If some nodes failed to convert, we ignore the route
+        # if len(coordinates) < len(ip_addresses):
+        #     continue
 
         # Route must have at least 2 hops, at src and dst.
         if len(coordinates) < 2:
