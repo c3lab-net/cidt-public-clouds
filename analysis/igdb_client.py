@@ -57,17 +57,18 @@ class PhysicalRoute:
                 (self.routers_latlon[-1], other.routers_latlon[0])
         # intermediate hops can get a redirect router hop, i.e. this[-2] = closest city, this[-1] = logical stop,
         #   other[0] = logical stop, and other[1] = closest city = this[-2]. In that case, we need to remove the intermediate hop (last of self, and first of other), and adjust the fiber paths and distances accordingly.
-        THRESHOLD_INTERMEDIATE_REDIRECT_KM = 100
+        THRESHOLD_INTERMEDIATE_REDIRECT_KM = 50
         remove_direct_hop = False
         if len(self.routers_latlon) > 2 and len(other.routers_latlon) > 2 and \
-                geodesic(self.routers_latlon[-2], other.routers_latlon[1]).km < THRESHOLD_CONSECUTIVE_HOPS_KM:
+                geodesic(self.routers_latlon[-2], other.routers_latlon[1]).km < THRESHOLD_INTERMEDIATE_REDIRECT_KM:
             self_extra_hop_distance_km = geodesic(
                 lonlat(*self.fiber_wkt_paths.geoms[-1].coords[0]),
                 lonlat(*self.fiber_wkt_paths.geoms[-1].coords[-1])).km
             other_extra_hop_distance_km = geodesic(
                 lonlat(*other.fiber_wkt_paths.geoms[0].coords[0]),
                 lonlat(*other.fiber_wkt_paths.geoms[0].coords[-1])).km
-            if math.isclose(self_extra_hop_distance_km, other_extra_hop_distance_km) and \
+            if math.isclose(self_extra_hop_distance_km, other_extra_hop_distance_km,
+                            abs_tol=THRESHOLD_INTERMEDIATE_REDIRECT_KM) and \
                     self_extra_hop_distance_km < THRESHOLD_INTERMEDIATE_REDIRECT_KM:
                 remove_direct_hop = True
         if remove_direct_hop:
