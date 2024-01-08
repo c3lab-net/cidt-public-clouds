@@ -223,11 +223,41 @@ def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[s
         check_route_by_ground_truth = lambda route: are_isos_equal(route[0], src_coordinate) and are_isos_equal(route[-1], dst_coordinate)
         return check_route_by_ground_truth
 
+def generate_direct_route_from_ground_truth(geo_coordinate_ground_truth: dict[str, Coordinate],
+                                             src_cloud: str, src_region: str,
+                                             dst_cloud: str, dst_region: str) -> \
+                                                list[RouteInCoordinate]:
+    src = f'{src_cloud}:{src_region}'
+    dst = f'{dst_cloud}:{dst_region}'
+    try:
+        src_coordinate = geo_coordinate_ground_truth[src]
+        dst_coordinate = geo_coordinate_ground_truth[dst]
+        route = [src_coordinate, dst_coordinate]
+        return [route]
+    except KeyError as ex:
+        logging.error(f'KeyError: {ex}')
+        logging.error(traceback.format_exc())
+        raise ValueError(f'Region not found in ground truth CSV: {ex}')
+
+def write_routes_to_file(routes: list[RouteInCoordinate], output_file: Optional[str]):
+    if output_file:
+        output = open(output_file, 'w')
+        logging.info(f'Writing (lat, lon) routes to {output_file} ...')
+    else:
+        output = sys.stdout
+
+    for route in routes:
+        print(route, file=output)
+
+    if output_file:
+        output.close()
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--routes_files', type=str, required=True, nargs='+', help='The routes file, each line contains a list that represents a route.')
-    parser.add_argument('--convert-ip-to-latlon', action='store_true', required=True,
+    parser.add_argument('--convert-ip-to-latlon', action='store_true',
                         help='Convert the routes from IP addresses to lat/lon coordinates')
+    parser.add_argument('--generate-direct-route-using-ground-truth', action='store_true', help='Generate direct route between cloud region pairs using ground truth src and dst geo coordinates.')
     parser.add_argument('-o', '--outputs', type=str, nargs='*', help='The output file.')
     parser.add_argument('--filter-geo-coordinate-by-ground-truth', action='store_true',
                         help='Filter the routes by ground truth geo coordinates.')
@@ -250,6 +280,13 @@ def parse_args():
     if args.filter_geo_coordinate_by_ground_truth:
         if not args.geo_coordinate_ground_truth_csv:
             parser.error('--geo-coordinate-ground-truth-csv must be specified when --filter-geo-coordinate-by-ground-truth is specified')
+
+    if args.generate_direct_route_using_ground_truth:
+        if not args.geo_coordinate_ground_truth_csv:
+            parser.error('--geo-coordinate-ground-truth-csv must be specified when '
+                         '--generate-direct-route-using-ground-truth is specified')
+
+    if args.geo_coordinate_ground_truth_csv:
         args.cloud_region_pair_by_filename = {}
         if not args.src_cloud and not args.dst_cloud and not args.src_region and not args.dst_region:
             # Check if we can auto-detect the src and dst cloud/region from the routes files
@@ -281,6 +318,24 @@ def parse_args():
 
     return args
 
+def get_src_dst_cloud_region(routes_file: str, args) -> tuple[str, str, str, str]:
+    if routes_file in args.cloud_region_pair_by_filename:
+        (src_cloud, src_region, dst_cloud, dst_region) = args.cloud_region_pair_by_filename[routes_file]
+    else:
+        (src_cloud, src_region) = (args.src_cloud, args.src_region)
+        (dst_cloud, dst_region) = (args.dst_cloud, args.dst_region)
+    return (src_cloud, src_region, dst_cloud, dst_region)
+
+def generate_output_filename(routes_file: str, outputs, i) -> Optional[str]:
+    if outputs is not None:
+        if len(outputs) == 0:
+            output_file = os.path.basename(routes_file).removesuffix('.by_ip') + '.by_geo'
+        else:
+            output_file = outputs[i]
+    else:
+        output_file = None
+    return output_file
+
 def main():
     init_logging(level=logging.INFO)
     args = parse_args()
@@ -294,25 +349,12 @@ def main():
             if args.filter_geo_coordinate_by_ground_truth else {}
         for i in range(len(args.routes_files)):
             routes_file: str = args.routes_files[i]
-            # Auto-name output_file
-            if args.outputs is not None:
-                if len(args.outputs) == 0:
-                    output_file = os.path.basename(routes_file).removesuffix('.by_ip') + '.by_geo'
-                else:
-                    output_file = args.outputs[i]
-            else:
-                output_file = None
+            output_file = generate_output_filename(routes_file, args.outputs, i)
             # Generate check route function
             if args.filter_geo_coordinate_by_ground_truth:
-                if routes_file in args.cloud_region_pair_by_filename:
-                    (src_cloud, src_region, dst_cloud, dst_region) = args.cloud_region_pair_by_filename[routes_file]
-                else:
-                    (src_cloud, src_region) = (args.src_cloud, args.src_region)
-                    (dst_cloud, dst_region) = (args.dst_cloud, args.dst_region)
                 check_route_by_ground_truth = \
                     get_route_check_function_by_ground_truth(geo_coordinate_ground_truth,
-                                                            src_cloud, src_region,
-                                                            dst_cloud, dst_region)
+                                                            *get_src_dst_cloud_region(routes_file, args))
             else:
                 check_route_by_ground_truth = lambda _: True
             # Convert routes
@@ -322,6 +364,14 @@ def main():
                                              check_route_by_ground_truth,
                                              args.remove_duplicate_consecutive_hops,
                                              output_file)
+    elif args.generate_direct_route_using_ground_truth:
+        geo_coordinate_ground_truth = load_region_to_geo_coordinate_ground_truth(args.geo_coordinate_ground_truth_csv)
+        for i in range(len(args.routes_files)):
+            routes_file: str = args.routes_files[i]
+            output_file = generate_output_filename(routes_file, args.outputs, i)
+            routes = generate_direct_route_from_ground_truth(geo_coordinate_ground_truth,
+                                                            *get_src_dst_cloud_region(routes_file, args))
+            write_routes_to_file(routes, output_file)
     else:
         raise ValueError('No action specified')
 
