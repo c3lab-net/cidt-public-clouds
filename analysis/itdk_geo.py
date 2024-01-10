@@ -109,14 +109,15 @@ class ItdkIpToGeoConverter(IpToGeoConverter):
             if coordinate not in self.d_no_city_coordinates_to_node_ids:
                 self.d_no_city_coordinates_to_node_ids[coordinate] = []
             self.d_no_city_coordinates_to_node_ids[coordinate].append(node_id)
-            # Temporary measure to ignore intermediate hop that likely has large accuracy radius
-            #   These are known coordinates without city info and leads to problems.
-            LOW_PRECISION_COORDINATES = [
-                (37.751, -97.822),
-                (59.3247, 18.056),
-            ]
-            if coordinate in LOW_PRECISION_COORDINATES:
-                raise IpToGeoConverter.LowGeoPrecisionException()
+            # Note: disabled this for ITDK dataset as baseline
+            # # Temporary measure to ignore intermediate hop that likely has large accuracy radius
+            # #   These are known coordinates without city info and leads to problems.
+            # LOW_PRECISION_COORDINATES = [
+            #     (37.751, -97.822),
+            #     (59.3247, 18.056),
+            # ]
+            # if coordinate in LOW_PRECISION_COORDINATES:
+            #     raise IpToGeoConverter.LowGeoPrecisionException()
         return coordinate
 
 def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
