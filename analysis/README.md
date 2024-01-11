@@ -88,8 +88,8 @@ Also see the below section ("Clean up noisy routes") for details on filtering by
 # Optionally, filter by adding --src-cloud aws/gcloud --dst-cloud aws/gcloud, or also by regions: --src-region ... --dst-region ...
 ./plot.routes.all_region_pairs.py --plot-heatmap --metrics hop_count --dirpath ./region_pair.by_geo.distribution/
 ./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance_km --dirpath ./region_pair.by_geo.distribution/
-./plot.routes.all_region_pairs.py --plot-pdfs --metrics hop_count --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
-./plot.routes.all_region_pairs.py --plot-pdfs --metrics distance_km --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-individual-pdfs --metrics hop_count --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
+./plot.routes.all_region_pairs.py --plot-individual-pdfs --metrics distance_km --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
 ```
 
 ### Traceroute from inside cloud regions

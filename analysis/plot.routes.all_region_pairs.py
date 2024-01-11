@@ -59,7 +59,7 @@ def extract_cloud_regions_from_filename(filename) -> tuple[tuple[str, str], tupl
     dst_region = m.group(4)
     return (src_cloud, src_region), (dst_cloud, dst_region)
 
-def plot_pdf(values, weights, src_region: str, dst_region: str, metric: str, data_source: str):
+def plot_single_pair_pdf(values, weights, src_region: str, dst_region: str, metric: str, data_source: str):
     # Normalize the weights to ensure they sum up to 1
     weights = np.array(weights) / np.sum(weights)
 
@@ -102,7 +102,7 @@ def plot_heatmap(src_regions: list[str], dst_regions: list[str], region_hop_coun
     plt.savefig(filename, bbox_inches='tight')
 
 def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[list[str]], Any],
-                                        metric: str, plot_pdfs: bool,
+                                        metric: str, plot_individual_pdfs: bool,
                                         src_cloud: Optional[str], src_region: Optional[str],
                                         dst_cloud: Optional[str], dst_region: Optional[str]):
     # Dictionary to hold the source-destination pairs and the aggregated value
@@ -133,8 +133,8 @@ def get_weighted_average_by_region_pair(dirpath: str, process_hops: Callable[[li
         dst = ':'.join(dst)
         weighted_average_by_region_pair[(src, dst)] = np.average(values, weights=weights).tolist()
 
-        if plot_pdfs:
-            plot_pdf(values, weights, src, dst, metric, DATA_SOURCE)
+        if plot_individual_pdfs:
+            plot_single_pair_pdf(values, weights, src, dst, metric, DATA_SOURCE)
     return weighted_average_by_region_pair
 
 def parse_args():
@@ -144,7 +144,7 @@ def parse_args():
     parser.add_argument('--dirpath', type=DirType, required=True, help='The directory that contains the routes files')
     parser.add_argument('--plot-heatmap', action='store_true',
                         help='Plot the heatmap of the metric across all region pairs')
-    parser.add_argument('--plot-pdfs', action='store_true',
+    parser.add_argument('--plot-individual-pdfs', action='store_true',
                         help='Plot the PDFs of the metric, one graph for each region pair')
     parser.add_argument('--src-cloud', required=False, help='The source cloud to filter on')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud to filter on')
@@ -152,8 +152,8 @@ def parse_args():
     parser.add_argument('--dst-region', required=False, help='The destination region to filter on')
     args = parser.parse_args()
 
-    if not (args.plot_heatmap or args.plot_pdfs):
-        parser.error('At least one of --plot-heatmap or --plot-pdfs must be specified')
+    if not (args.plot_heatmap or args.plot_individual_pdfs):
+        parser.error('At least one of --plot-heatmap or --plot-individual-pdfs must be specified')
 
     if args.src_region and not args.src_cloud:
         parser.error('--src-cloud must be specified with --src-region')
@@ -169,7 +169,8 @@ def main():
 
     for metric in args.metrics:
         process_hops = lambda x: calculate_route_metric(x, metric)
-        value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric, args.plot_pdfs,
+        value_by_region_pair = get_weighted_average_by_region_pair(args.dirpath, process_hops, metric,
+                                                                   args.plot_individual_pdfs,
                                                                    args.src_cloud, args.src_region,
                                                                    args.dst_cloud, args.dst_region)
         src_dst_pairs = value_by_region_pair.keys()
