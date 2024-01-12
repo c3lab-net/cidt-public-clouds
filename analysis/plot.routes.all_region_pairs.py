@@ -11,7 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Any, Optional
 
-from common import DirType, RouteMetric, calculate_route_metric, init_logging
+from common import DirType, RouteMetric, Statistic, calculate_route_metric, init_logging, plot_cdf_array, weighted_median
 
 DATA_SOURCE = 'caida.itdk'
 
@@ -174,6 +174,35 @@ def get_weighted_average_by_region_pair(
         weighted_average_by_region_pair[region_pair] = np.average(values, weights=weights)
     return weighted_average_by_region_pair
 
+def aggregate_values_by_region_pair(
+        values_and_weights_by_region_pair: dict[tuple[str, str], tuple[list[Any], list[float]]],
+        statistic: Statistic):
+    aggregate_value_by_region_pair = {}
+    for region_pair, (values, weights) in values_and_weights_by_region_pair.items():
+        if statistic == Statistic.MEAN:
+            aggregate_value_by_region_pair[region_pair] = np.average(values, weights=weights)
+        elif statistic == Statistic.MEDIAN:
+            aggregate_value_by_region_pair[region_pair] = weighted_median(values, weights=weights)
+        elif statistic == Statistic.MIN:
+            aggregate_value_by_region_pair[region_pair] = np.min(values)
+        elif statistic == Statistic.MAX:
+            aggregate_value_by_region_pair[region_pair] = np.max(values)
+        else:
+            raise ValueError(f'Unsupported statistic {statistic}')
+    return aggregate_value_by_region_pair
+
+def plot_cdf(value_by_region_pair: dict[tuple[str, str], float], metric: RouteMetric,
+             aggregate_by: Statistic, data_source: str):
+    values = list(value_by_region_pair.values())
+    plot_cdf_array(values, f'{aggregate_by} {metric}', include_count=True)
+    plt.xlabel('Values')
+    plt.ylabel('CDF')
+    plt.title(f'CDF of {aggregate_by} {metric} per region-pair ({data_source})')
+
+    filename = f'{metric}.{aggregate_by}.cdf.{data_source}.png'
+    logging.info(f'Saving heatmap to {filename} ...')
+    plt.savefig(filename, bbox_inches='tight')
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--metrics', required=True, nargs='+', type=RouteMetric, choices=list(RouteMetric),
@@ -183,6 +212,10 @@ def parse_args():
                         help='The TSV file that contains the routes by region pair')
     parser.add_argument('--plot-heatmap', action='store_true',
                         help='Plot the heatmap of the metric across all region pairs')
+    parser.add_argument('--plot-cdf', action='store_true',
+                        help='Plot the CDF of the metric across all region pairs')
+    parser.add_argument('--aggregate-each-region-pair-by', type=Statistic, choices=list(Statistic),
+                        help='The aggregation function to use for each region pair\'s metric values')
     parser.add_argument('--plot-individual-pdfs', action='store_true',
                         help='Plot the PDFs of the metric, one graph for each region pair')
     parser.add_argument('--src-cloud', required=False, help='The source cloud to filter on')
@@ -191,8 +224,8 @@ def parse_args():
     parser.add_argument('--dst-region', required=False, help='The destination region to filter on')
     args = parser.parse_args()
 
-    if not (args.plot_heatmap or args.plot_individual_pdfs):
-        parser.error('At least one of --plot-heatmap or --plot-individual-pdfs must be specified')
+    if not (args.plot_heatmap or args.plot_individual_pdfs or args.plot_cdf):
+        parser.error('At least one of --plot-heatmap, --plot-individual-pdfs, or --plot-cdf must be specified')
 
     if args.dirpath is not None != args.routes_distribution_tsv is not None:
         parser.error('Either --dirpath or --routes-distribution-tsv must be specified')
@@ -202,6 +235,10 @@ def parse_args():
 
     if args.dst_region and not args.dst_cloud:
         parser.error('--dst-cloud must be specified with --dst-region')
+
+    if args.plot_cdf:
+        if not args.aggregate_each_region_pair_by:
+            parser.error('--aggregate-each-region-pair-by must be specified with --plot-cdf')
 
     return args
 
@@ -231,6 +268,11 @@ def main():
             src_regions = sorted(set(t[0] for t in region_pairs))
             dst_regions = sorted(set(t[1] for t in region_pairs))
             plot_heatmap(src_regions, dst_regions, weighted_average_by_region_pair, metric, DATA_SOURCE)
+
+        if args.plot_cdf:
+            value_by_region_pair = aggregate_values_by_region_pair(
+                values_and_weights_by_region_pair, args.aggregate_each_region_pair_by)
+            plot_cdf(value_by_region_pair, metric, args.aggregate_each_region_pair_by, DATA_SOURCE)
 
 if __name__ == '__main__':
     main()
