@@ -13,7 +13,8 @@ from typing import Any, Optional
 
 from common import DirType, RouteMetric, Statistic, calculate_route_metric, init_logging, plot_cdf_array, weighted_median
 
-DATA_SOURCE = 'caida.itdk'
+# Global variable to hold the labels for the plots with multiple lines
+plot_labels = None
 
 
 def load_weighted_hops(file_path: str) -> pd.DataFrame:
@@ -192,14 +193,25 @@ def aggregate_values_by_region_pair(
     return aggregate_value_by_region_pair
 
 def plot_cdf(value_by_region_pair: dict[tuple[str, str], float], metric: RouteMetric,
-             aggregate_by: Statistic, data_source: str):
+             aggregate_by: Statistic, label: str):
     values = list(value_by_region_pair.values())
-    plot_cdf_array(values, f'{aggregate_by} {metric}', include_count=True)
+    plot_cdf_array(values, f'{label} - {aggregate_by} {metric}', include_count=True)
     plt.xlabel('Values')
     plt.ylabel('CDF')
-    plt.title(f'CDF of {aggregate_by} {metric} per region-pair ({data_source})')
 
-    filename = f'{metric}.{aggregate_by}.cdf.{data_source}.png'
+    # Add the label to temporary global variable. This is used to annotate the filename and title.
+    global plot_labels
+    if not plot_labels:
+        plot_labels = label
+    else:
+        plot_labels = f'{plot_labels}+{label}'
+
+def save_last_plot(metric: RouteMetric, aggregate_by: Statistic, label_cloud_region: str):
+    global plot_labels
+    # plt.title(f'CDF of {aggregate_by} {metric} per region-pair ({plot_labels})')
+    plt.title(f'CDF of {aggregate_by} {metric} per region-pair')
+    plt.legend()
+    filename = f'{metric}.{aggregate_by}.cdf.{label_cloud_region}.{plot_labels}.png'
     logging.info(f'Saving heatmap to {filename} ...')
     plt.savefig(filename, bbox_inches='tight')
 
@@ -207,8 +219,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--metrics', required=True, nargs='+', type=RouteMetric, choices=list(RouteMetric),
                         help='The metrics to plot')
-    parser.add_argument('--dirpath', type=DirType, help='The directory that contains the routes files')
-    parser.add_argument('--routes-distribution-tsv', type=argparse.FileType('r'),
+    parser.add_argument('--dirpaths', type=DirType, nargs='+', help='The directory that contains the routes files')
+    parser.add_argument('--routes-distribution-tsvs', type=argparse.FileType('r'), nargs='+',
                         help='The TSV file that contains the routes by region pair')
     parser.add_argument('--plot-heatmap', action='store_true',
                         help='Plot the heatmap of the metric across all region pairs')
@@ -227,8 +239,8 @@ def parse_args():
     if not (args.plot_heatmap or args.plot_individual_pdfs or args.plot_cdf):
         parser.error('At least one of --plot-heatmap, --plot-individual-pdfs, or --plot-cdf must be specified')
 
-    if args.dirpath is not None != args.routes_distribution_tsv is not None:
-        parser.error('Either --dirpath or --routes-distribution-tsv must be specified')
+    if args.dirpaths is not None != args.routes_distribution_tsvs is not None:
+        parser.error('Either --dirpaths or --routes-distribution-tsvs must be specified')
 
     if args.src_region and not args.src_cloud:
         parser.error('--src-cloud must be specified with --src-region')
@@ -240,39 +252,88 @@ def parse_args():
         if not args.aggregate_each_region_pair_by:
             parser.error('--aggregate-each-region-pair-by must be specified with --plot-cdf')
 
+    if args.src_region and not args.src_cloud:
+        parser.error('--src-cloud must be specified with --src-region')
+    if args.dst_region and not args.dst_cloud:
+        parser.error('--dst-cloud must be specified with --dst-region')
+
     return args
+
+def get_label_from_path(path: str) -> str:
+    LSTRIP_PREFIXES = [
+        'routes.all.',
+        'routes.aws.',
+        'routes.gcloud.',
+    ]
+    RSTRIP_SUFFIXES = [
+        '.by_geo.distribution.tsv',
+        '.by_geo.distribution',
+    ]
+    label = os.path.basename(path)
+    for prefix in LSTRIP_PREFIXES:
+        label = label.lstrip(prefix)
+    for suffix in RSTRIP_SUFFIXES:
+        label = label.rstrip(suffix)
+    return label
+
+def get_label_from_cloud_region_pair(
+        src_cloud: Optional[str] = None, src_region: Optional[str] = None,
+        dst_cloud: Optional[str] = None, dst_region: Optional[str] = None) -> str:
+    def _get_label(cloud: Optional[str], region: Optional[str]) -> str:
+        if cloud and region:
+            return f'{cloud}.{region}'
+        elif cloud:
+            return f'{cloud}.all'
+        else:
+            return 'all_clouds'
+    src_label = _get_label(src_cloud, src_region)
+    dst_label = _get_label(dst_cloud, dst_region)
+    return f'{src_label}.{dst_label}'
+
+def run_action(args, metric, values_and_weights_by_region_pair, path):
+    label = get_label_from_path(path)
+
+    if args.plot_individual_pdfs:
+        for (src, dst), (values, weights) in values_and_weights_by_region_pair.items():
+            plot_single_pair_pdf(values, weights, src, dst, metric, label)
+
+    if args.plot_heatmap:
+        ignore_zeros = metric in (RouteMetric.HopCount, RouteMetric.DistanceKM)
+        weighted_average_by_region_pair = get_weighted_average_by_region_pair(
+                values_and_weights_by_region_pair, ignore_zeros)
+        region_pairs = weighted_average_by_region_pair.keys()
+        src_regions = sorted(set(t[0] for t in region_pairs))
+        dst_regions = sorted(set(t[1] for t in region_pairs))
+        plot_heatmap(src_regions, dst_regions, weighted_average_by_region_pair, metric, label)
+
+    if args.plot_cdf:
+        value_by_region_pair = aggregate_values_by_region_pair(
+                values_and_weights_by_region_pair, args.aggregate_each_region_pair_by)
+        plot_cdf(value_by_region_pair, metric, args.aggregate_each_region_pair_by, label)
 
 def main():
     init_logging(level=logging.INFO)
     args = parse_args()
 
     for metric in args.metrics:
-        if args.dirpath:
-            values_and_weights_by_region_pair = get_values_and_weights_by_region_pair_from_raw_files(
-                args.dirpath, metric, args.src_cloud, args.src_region, args.dst_cloud, args.dst_region)
-        elif args.routes_distribution_tsv:
-            values_and_weights_by_region_pair = get_values_and_weights_by_region_pair_from_tsv(
-                args.routes_distribution_tsv, metric, args.src_cloud, args.src_region, args.dst_cloud, args.dst_region)
+        logging.info('Processing metric %s ...', metric)
+        if args.dirpaths:
+            for dirpath in args.dirpaths:
+                values_and_weights_by_region_pair = get_values_and_weights_by_region_pair_from_raw_files(
+                    dirpath, metric, args.src_cloud, args.src_region, args.dst_cloud, args.dst_region)
+                run_action(args, metric, values_and_weights_by_region_pair, dirpath)
+        elif args.routes_distribution_tsvs:
+            for routes_distribution_tsv in args.routes_distribution_tsvs:
+                values_and_weights_by_region_pair = get_values_and_weights_by_region_pair_from_tsv(
+                    routes_distribution_tsv, metric, args.src_cloud, args.src_region, args.dst_cloud, args.dst_region)
+                run_action(args, metric, values_and_weights_by_region_pair, routes_distribution_tsv.name)
         else:
-            raise ValueError('Either --dirpath or --routes-distribution-tsv must be specified')
-
-        if args.plot_individual_pdfs:
-            for (src, dst), (values, weights) in values_and_weights_by_region_pair.items():
-                plot_single_pair_pdf(values, weights, src, dst, metric, DATA_SOURCE)
-
-        if args.plot_heatmap:
-            ignore_zeros = metric in (RouteMetric.HopCount, RouteMetric.DistanceKM)
-            weighted_average_by_region_pair = get_weighted_average_by_region_pair(
-                values_and_weights_by_region_pair, ignore_zeros)
-            region_pairs = weighted_average_by_region_pair.keys()
-            src_regions = sorted(set(t[0] for t in region_pairs))
-            dst_regions = sorted(set(t[1] for t in region_pairs))
-            plot_heatmap(src_regions, dst_regions, weighted_average_by_region_pair, metric, DATA_SOURCE)
-
+            raise ValueError('Either --dirpaths or --routes-distribution-tsvs must be specified')
+        # Save the combined plot in case of CDF.
         if args.plot_cdf:
-            value_by_region_pair = aggregate_values_by_region_pair(
-                values_and_weights_by_region_pair, args.aggregate_each_region_pair_by)
-            plot_cdf(value_by_region_pair, metric, args.aggregate_each_region_pair_by, DATA_SOURCE)
+            label_cloud_region = get_label_from_cloud_region_pair(args.src_cloud, args.src_region,
+                                                                  args.dst_cloud, args.dst_region)
+            save_last_plot(metric, args.aggregate_each_region_pair_by, label_cloud_region)
 
 if __name__ == '__main__':
     main()
