@@ -86,8 +86,11 @@ Also see the below section ("Clean up noisy routes") for details on filtering by
 - (Optional) We can also plot the distribution of the routes statistics like `hop_count` and `distance_km` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
 ```Shell
 # Optionally, filter by adding --src-cloud aws/gcloud --dst-cloud aws/gcloud, or also by regions: --src-region ... --dst-region ...
+# Or equivalent to `--dirpath path/to/.distribution/files`, read from the combined TSV with headers via `--routes-distribution-tsvs routes.all.by_geo.distribution.tsv`
 ./plot.routes.all_region_pairs.py --plot-heatmap --metrics hop_count --dirpath ./region_pair.by_geo.distribution/
 ./plot.routes.all_region_pairs.py --plot-heatmap --metrics distance_km --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-cdf --aggregate-each-region-pair-by min --metrics hop_count --dirpath ./region_pair.by_geo.distribution/
+./plot.routes.all_region_pairs.py --plot-cdf --aggregate-each-region-pair-by min --metrics distance_km --dirpath ./region_pair.by_geo.distribution/
 ./plot.routes.all_region_pairs.py --plot-individual-pdfs --metrics hop_count --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
 ./plot.routes.all_region_pairs.py --plot-individual-pdfs --metrics distance_km --dirpath ./region_pair.by_geo.distribution/ --src-cloud aws --src-region us-west-1 --dst-cloud aws --dst-region us-east-1
 ```
