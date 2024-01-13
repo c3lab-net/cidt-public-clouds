@@ -159,7 +159,14 @@ def get_values_and_weights_by_region_pair_from_tsv(routes_distribution_tsv: io.T
         if key not in values_and_weights_by_region_pair:
             values_and_weights_by_region_pair[key] = ([], [])
         values_and_weights_by_region_pair[key][0].append(_parse_value(row[metric], metric))
-        values_and_weights_by_region_pair[key][1].append(float(row['count']))
+        # Try to read weight from file. If not found, default to 1.
+        if 'count' in row:
+            weight = float(row['count'])
+        elif 'weight' in row:
+            weight = float(row['weight'])
+        else:
+            weight = 1
+        values_and_weights_by_region_pair[key][1].append(weight)
     return values_and_weights_by_region_pair
 
 def get_weighted_average_by_region_pair(
