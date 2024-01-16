@@ -34,6 +34,7 @@ This produces a file that contains one route on each line, for each source IP, a
 - (Supplemental) We can further improve the accuracy of the traceroute-level dataset by querying iGDB dataset, provided by an external program.
 ```Shell
 mv routes.aws.us-west-1.us-east-1.by_geo routes.aws.us-west-1.us-east-1.by_geo.logical
+# (optionally, include nearby AS locations) --include-nearby-as-locations
 ./igdb_client.py --convert-to-physical-hops --preserve-igdb-api-cache --routes_file routes.aws.us-west-1.us-east-1.by_geo.logical -o routes.aws.us-west-1.us-east-1.by_geo.physical
 awk -F '\t' '{print $1}' routes.aws.us-west-1.us-east-1.by_geo.physical > routes.aws.us-west-1.us-east-1.by_geo
 ```
