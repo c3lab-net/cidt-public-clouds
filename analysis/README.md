@@ -81,7 +81,8 @@ Afterwards, we can run IP-to-geo-coordinate, geo-coordinate-to-ISO and ISO distr
 Note that IP-to-geo script accepts multiple input files, due to its overhead of loading the GEO dataset. The other two scripts can be easily ran in a for loop.
 Also see the below section ("Clean up noisy routes") for details on filtering by ground truth.
 ```Shell
-./run_all.conversions.sh
+# (optional) --ip-geolocation-accuracy-radius 100 --include-nearby-as-locations --generate-iso-files
+./run_all.conversions.sh --work-dir result --use-maxmind
 ```
 
 - (Optional) We can also plot the distribution of the routes statistics like `hop_count` and `distance_km` using this all-region-pairs plotting script. You can want to update the region filters for PDF plots, as it's on a per-region basis.
