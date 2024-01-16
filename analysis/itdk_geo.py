@@ -13,7 +13,7 @@ from typing import Callable, Optional
 import numpy as np
 import pandas as pd
 
-from common import Coordinate, RouteInCoordinate, RouteInIP, calculate_total_distance_km, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
+from common import Coordinate, DirType, RouteInCoordinate, RouteInIP, calculate_total_distance_km, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
 from carbon_client import get_carbon_region_from_coordinate
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo') -> pd.DataFrame:
@@ -286,6 +286,7 @@ def parse_args():
                         help='Convert the routes from IP addresses to lat/lon coordinates')
     parser.add_argument('--generate-direct-route-using-ground-truth', action='store_true', help='Generate direct route between cloud region pairs using ground truth src and dst geo coordinates.')
     parser.add_argument('-o', '--outputs', type=str, nargs='*', help='The output file.')
+    parser.add_argument('--output-dir', type=DirType, help='The output directory.')
     parser.add_argument('--filter-geo-coordinate-by-ground-truth', action='store_true',
                         help='Filter the routes by ground truth geo coordinates.')
     parser.add_argument('--geo-coordinate-ground-truth-csv', type=argparse.FileType('r'),
@@ -353,7 +354,7 @@ def get_src_dst_cloud_region(routes_file: str, args) -> tuple[str, str, str, str
         (dst_cloud, dst_region) = (args.dst_cloud, args.dst_region)
     return (src_cloud, src_region, dst_cloud, dst_region)
 
-def generate_output_filename(routes_file: str, outputs, i) -> Optional[str]:
+def generate_output_filename(routes_file: str, outputs: list[str], i: int, output_dir: str = '.') -> Optional[str]:
     if outputs is not None:
         if len(outputs) == 0:
             output_file = os.path.basename(routes_file).removesuffix('.by_ip') + '.by_geo'
@@ -361,7 +362,7 @@ def generate_output_filename(routes_file: str, outputs, i) -> Optional[str]:
             output_file = outputs[i]
     else:
         output_file = None
-    return output_file
+    return os.path.join(output_dir, output_file) if output_file else output_file
 
 def main():
     init_logging(level=logging.INFO)
@@ -376,7 +377,7 @@ def main():
             if args.filter_geo_coordinate_by_ground_truth else {}
         for i in range(len(args.routes_files)):
             routes_file: str = args.routes_files[i]
-            output_file = generate_output_filename(routes_file, args.outputs, i)
+            output_file = generate_output_filename(routes_file, args.outputs, i, args.output_dir)
             # Generate check route function
             if args.filter_geo_coordinate_by_ground_truth:
                 check_route_by_ground_truth = \
@@ -395,7 +396,7 @@ def main():
         geo_coordinate_ground_truth = load_region_to_geo_coordinate_ground_truth(args.geo_coordinate_ground_truth_csv)
         for i in range(len(args.routes_files)):
             routes_file: str = args.routes_files[i]
-            output_file = generate_output_filename(routes_file, args.outputs, i)
+            output_file = generate_output_filename(routes_file, args.outputs, i, args.output_dir)
             routes = generate_direct_route_from_ground_truth(geo_coordinate_ground_truth,
                                                             *get_src_dst_cloud_region(routes_file, args))
             write_routes_to_file(routes, output_file)
