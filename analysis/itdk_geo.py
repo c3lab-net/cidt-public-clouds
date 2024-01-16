@@ -13,7 +13,7 @@ from typing import Callable, Optional
 import numpy as np
 import pandas as pd
 
-from common import Coordinate, RouteInCoordinate, RouteInIP, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
+from common import Coordinate, RouteInCoordinate, RouteInIP, calculate_total_distance_km, detect_cloud_regions_from_filename, get_routes_from_file, init_logging, load_itdk_node_ip_to_id_mapping, remove_duplicate_consecutive_hops
 from carbon_client import get_carbon_region_from_coordinate
 
 def parse_node_geo_as_dataframe(node_geo_filename='../data/caida-itdk/midar-iff.nodes.geo') -> pd.DataFrame:
@@ -134,6 +134,9 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
     else:
         output = None
 
+    src_locations = set()
+    dst_locations = set()
+
     for ip_addresses in routes:
         # Convert node IDs to latitude and longitude using the node_geo_df dictionary
         coordinates: list[Coordinate] = []
@@ -158,6 +161,9 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
             logging.warning(f'Ignoring route with less than 2 hops: {coordinates}')
             continue
 
+        src_locations.add(coordinates[0])
+        dst_locations.add(coordinates[-1])
+
         # Check if the route is valid
         if not is_valid_route(coordinates):
             continue
@@ -171,6 +177,13 @@ def convert_routes_from_ip_to_latlon(routes: list[RouteInIP],
 
     if output:
         output.close()
+
+    logging.info('Source locations (%d):', len(src_locations))
+    for coordinate in src_locations:
+        logging.info(f'{coordinate} ({get_carbon_region_from_coordinate(coordinate)})')
+    logging.info('Destination locations (%d):', len(dst_locations))
+    for coordinate in dst_locations:
+        logging.info(f'{coordinate} ({get_carbon_region_from_coordinate(coordinate)})')
 
     logging.info('Converted/Total: %d/%d', len(converted_routes), len(routes))
 
@@ -209,16 +222,30 @@ def get_route_check_function_by_ground_truth(geo_coordinate_ground_truth: dict[s
             raise ValueError(f'Region not found in ground truth CSV: {ex}')
 
         logging.info('Filtering routes based on ground truth geo coordinates of src and dst, converted to ISOs ...')
-        logging.info(f'Ground truth: src: {src} -> {src_iso}, dst: {dst} -> {dst_iso}')
+        logging.info(f'Ground truth: src: {src} -> {src_coordinate} ({src_iso}), '
+                     f'dst: {dst} -> {dst_coordinate} ({dst_iso})')
+        # Allow small inaccuracy for certain US regions' ISO mapping.
+        ISO_MISMATCH_WHITELIST = [
+            ('emap:US-TEN-TVA', 'emap:US-SE-SOCO'),
+            ('emap:US-CENT-SWPP', 'emap:US-MIDW-AECI'),
+            ('emap:US-CAR-SC', 'emap:US-CAR-SCEG'),
+            ('emap:US-NW-SCL', 'emap:US-NW-PACW'),
+        ]
+        ISO_MISMATCH_DISTANCE_THRESHOLD_KM = 250
         @functools.cache
         def are_isos_equal(coord1: Coordinate, coord2: Coordinate):
-            # (lat1, lon1) = gps1.split(',', 1)
-            # (lat2, lon2) = gps2.split(',', 1)
-            # coord1 = (float(lat1), float(lon1))
-            # coord2 = (float(lat2), float(lon2))
             iso1 = get_carbon_region_from_coordinate(coord1)
             logging.debug(f'ISO mapping: {coord1} -> {iso1}')
-            return iso1 == get_carbon_region_from_coordinate(coord2)
+            iso2 = get_carbon_region_from_coordinate(coord2)
+            distance_km = calculate_total_distance_km([coord1, coord2])
+            if iso1 == iso2:
+                return True
+            elif (iso1, iso2) in ISO_MISMATCH_WHITELIST and distance_km < ISO_MISMATCH_DISTANCE_THRESHOLD_KM:
+                logging.info(f'ISO mismatch allowed: {coord1} ({iso1}) != {coord2} ({iso2}). Distance: {distance_km:.2f}km')
+                return True
+            else:
+                logging.info(f'ISO mismatch disallowed: {coord1} ({iso1}) != {coord2} ({iso2}). Distance: {distance_km:.2f}km')
+                return False
 
         check_route_by_ground_truth = lambda route: are_isos_equal(route[0], src_coordinate) and are_isos_equal(route[-1], dst_coordinate)
         return check_route_by_ground_truth
