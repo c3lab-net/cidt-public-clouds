@@ -12,6 +12,10 @@ import time
 import logging
 from typing import Any, Optional
 from geopy.distance import geodesic
+import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+from packaging import version
 
 CARBON_API_URL = 'http://yak-03.sysnet.ucsd.edu'
 MATCHED_NODES_FILENAME_AWS = 'matched_nodes.aws.by_region.txt'
@@ -27,6 +31,15 @@ class RouteMetric(str, Enum):
     DistanceKM = 'distance_km'
     FiberWktPaths = 'fiber_wkt_paths'
     FiberTypes = 'fiber_types'
+
+    def __str__(self) -> str:
+        return self.value
+
+class Statistic(str, Enum):
+    MEAN = 'mean'
+    MEDIAN = 'median'
+    MIN = 'min'
+    MAX = 'max'
 
     def __str__(self) -> str:
         return self.value
@@ -198,3 +211,49 @@ def calculate_route_metric(route: str, metric: RouteMetric) -> float:
             return round(calculate_total_distance_km([ast.literal_eval(e) for e in route.split('|')]), 2)
         case _:
             raise ValueError(f'Unknown metric {metric}')
+
+def weighted_quantiles(values: list[Any], weights: list[float], quantiles=0.5) -> Any:
+    i = np.argsort(values)
+    c = np.cumsum(weights[i])
+    return values[i[np.searchsorted(c, np.array(quantiles) * c[-1])]]
+
+def weighted_median(values: list[Any], weights: list[float]) -> Any:
+    return weighted_quantiles(values, weights, 0.5)
+
+def get_next_color():
+    ax = plt.gca()
+    if version.parse(matplotlib.__version__) < version.parse('1.5'):
+        ax_color_cycle = ax._get_lines.color_cycle
+    else:
+        ax_color_cycle = ax._get_lines.prop_cycler
+    if sys.version_info.major == 2:
+        color = ax_color_cycle.next()
+    else:
+        color = next(ax_color_cycle)
+    if version.parse(matplotlib.__version__) >= version.parse('1.5'):
+        color = color['color']
+    return color
+
+def get_linestyle(index):
+    styles = [
+        'solid',
+        'dotted',
+        'dashed',
+        'dashdot',
+        (0, (3, 5, 1, 5, 1, 5)), # 'dashdotdotted'
+        (0, (5, 10)), # 'loosely dashed'
+        (0, (3, 1, 1, 1)), # 'densely dashdotted'
+        (0, (3, 10, 1, 10, 1, 10)), # 'loosely dashdotdotted'
+        (0, (3, 1, 1, 1, 1, 1)), #'densely dashdotdotted'
+
+    ]
+    return styles[index % len(styles)]
+
+def plot_cdf_array(array, label, include_count = False, index=0, color=None):
+    x = sorted(array)
+    y = np.linspace(0., 1., len(array) + 1)[1:]
+    if include_count:
+        label += ' (%d)' % len(array)
+    if color is None:
+        color = get_next_color()
+    plt.plot(x, y, label=label, color=color, linestyle=get_linestyle(index))
