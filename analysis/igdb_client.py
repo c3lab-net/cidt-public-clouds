@@ -12,7 +12,7 @@ from typing import Optional
 import requests_cache
 from shapely import wkt
 from shapely.geometry import MultiLineString
-from geopy.distance import geodesic, lonlat
+from geopy.distance import geodesic, lonlat, great_circle
 
 from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging
 
@@ -154,11 +154,14 @@ def validate_start_end_offset(logical_route: LogicalRoute, physical_route: Physi
     assert start_offset_km < DISTANCE_THRESHOLD_KM, 'Start offset is too large: %f km' % start_offset_km
     assert end_offset_km < DISTANCE_THRESHOLD_KM, 'End offset is too large: %f km' % end_offset_km
 
+def get_great_circle_distance_km(logical_route: LogicalRoute) -> float:
+    return great_circle(logical_route[0], logical_route[-1]).km
+
 @functools.cache
 def convert_logical_route_to_physical_route(logical_route: LogicalRoute,
                                             src_cloud: str,
                                             dst_cloud: str,
-                                            include_nearby_as_locations: bool) -> PhysicalRoute:
+                                            include_nearby_as_locations: bool) -> Optional[PhysicalRoute]:
     logging.info('Converting logical route %s ...', logical_route)
     physical_route: PhysicalRoute = PhysicalRoute([], 0, MultiLineString([]), [])
     for i in range(len(logical_route) - 1):
@@ -167,7 +170,13 @@ def convert_logical_route_to_physical_route(logical_route: LogicalRoute,
                                                    include_nearby_as_locations)
         physical_route.extend(intermediate_hops)
     validate_start_end_offset(logical_route, physical_route)
-    return physical_route
+    great_circle_distance_km = get_great_circle_distance_km(logical_route)
+    if physical_route.distance_km > 2 * great_circle_distance_km:
+        logging.warning('Physical route is too long: %.2f > 2 * %.2f' % \
+                        (physical_route.distance_km, great_circle_distance_km))
+        return None
+    else:
+        return physical_route
 
 def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRoute],
                                                   src_cloud: str,
@@ -178,7 +187,8 @@ def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRo
         try:
             physical_route = convert_logical_route_to_physical_route(tuple(logical_route), src_cloud, dst_cloud,
                                                                      include_nearby_as_locations)
-            print(physical_route.to_tsv(), file=output if output else sys.stdout)
+            if physical_route:
+                print(physical_route.to_tsv(), file=output if output else sys.stdout)
         except AssertionError as ex:
             logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
             logging.error(traceback.format_exc())
