@@ -205,6 +205,7 @@ def plot_cdf(value_by_region_pair: dict[tuple[str, str], float], metric: RouteMe
     plot_cdf_array(values, f'{label} - {aggregate_by} {metric}', include_count=True)
     plt.xlabel('Values')
     plt.ylabel('CDF')
+    plt.ylim(0, 1)
 
     # Add the label to temporary global variable. This is used to annotate the filename and title.
     global plot_labels
