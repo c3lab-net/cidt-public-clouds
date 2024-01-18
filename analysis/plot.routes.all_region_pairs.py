@@ -272,16 +272,18 @@ def get_label_from_path(path: str) -> str:
         'routes.all.',
         'routes.aws.',
         'routes.gcloud.',
+        'cloud_region_best_route.',
     ]
     RSTRIP_SUFFIXES = [
         '.by_geo.distribution.tsv',
         '.by_geo.distribution',
+        '.tsv',
     ]
     label = os.path.basename(path)
     for prefix in LSTRIP_PREFIXES:
-        label = label.lstrip(prefix)
+        label = label.removeprefix(prefix)
     for suffix in RSTRIP_SUFFIXES:
-        label = label.rstrip(suffix)
+        label = label.removesuffix(suffix)
     return label
 
 def get_label_from_cloud_region_pair(
