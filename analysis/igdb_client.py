@@ -12,7 +12,7 @@ from typing import Optional
 import requests_cache
 from shapely import wkt
 from shapely.geometry import MultiLineString
-from geopy.distance import geodesic, lonlat
+from geopy.distance import geodesic, lonlat, great_circle
 
 from common import detect_cloud_regions_from_filename, get_routes_from_file, init_logging
 
@@ -108,7 +108,8 @@ def load_fiber_wkt_paths(fiber_wkt_paths: str) -> MultiLineString:
         raise AssertionError('Invalid fiber_wkt_paths %s: %s' % (fiber_wkt_paths, ex))
 
 def get_igdb_physical_hops(src: Coordinate, dst: Coordinate,
-                           src_cloud: str, dst_cloud: str) -> PhysicalRoute:
+                           src_cloud: str, dst_cloud: str,
+                           include_nearby_as_locations: bool) -> PhysicalRoute:
     """Get the physical hops between two coordinates using iGDB, inclusive of both ends."""
     (src_lat, src_lon) = src
     (dst_lat, dst_lon) = dst
@@ -120,7 +121,7 @@ def get_igdb_physical_hops(src: Coordinate, dst: Coordinate,
         'dst_longitude': dst_lon,
         'src_cloud': src_cloud,
         'dst_cloud': dst_cloud,
-        'search_for_nearby_as_locations': True,
+        'search_for_nearby_as_locations': include_nearby_as_locations,
     })
     assert response.ok, "iGDB physical hops lookup failed for %s -> %s (%d): %s" % \
         (src, dst, response.status_code, response.text)
@@ -153,27 +154,41 @@ def validate_start_end_offset(logical_route: LogicalRoute, physical_route: Physi
     assert start_offset_km < DISTANCE_THRESHOLD_KM, 'Start offset is too large: %f km' % start_offset_km
     assert end_offset_km < DISTANCE_THRESHOLD_KM, 'End offset is too large: %f km' % end_offset_km
 
+def get_great_circle_distance_km(logical_route: LogicalRoute) -> float:
+    return great_circle(logical_route[0], logical_route[-1]).km
+
 @functools.cache
 def convert_logical_route_to_physical_route(logical_route: LogicalRoute,
                                             src_cloud: str,
-                                            dst_cloud: str) -> PhysicalRoute:
+                                            dst_cloud: str,
+                                            include_nearby_as_locations: bool) -> Optional[PhysicalRoute]:
     logging.info('Converting logical route %s ...', logical_route)
     physical_route: PhysicalRoute = PhysicalRoute([], 0, MultiLineString([]), [])
     for i in range(len(logical_route) - 1):
         intermediate_hops = get_igdb_physical_hops(logical_route[i], logical_route[i + 1],
-                                                   src_cloud, dst_cloud)
+                                                   src_cloud, dst_cloud,
+                                                   include_nearby_as_locations)
         physical_route.extend(intermediate_hops)
     validate_start_end_offset(logical_route, physical_route)
-    return physical_route
+    great_circle_distance_km = get_great_circle_distance_km(logical_route)
+    if physical_route.distance_km > 2 * great_circle_distance_km:
+        logging.warning('Physical route is too long: %.2f > 2 * %.2f' % \
+                        (physical_route.distance_km, great_circle_distance_km))
+        return None
+    else:
+        return physical_route
 
 def convert_all_logical_routes_to_physical_routes(logical_routes: list[LogicalRoute],
                                                   src_cloud: str,
                                                   dst_cloud: str,
+                                                  include_nearby_as_locations: bool,
                                                   output: Optional[io.TextIOWrapper]) -> None:
     for logical_route in logical_routes:
         try:
-            physical_route = convert_logical_route_to_physical_route(tuple(logical_route), src_cloud, dst_cloud)
-            print(physical_route.to_tsv(), file=output if output else sys.stdout)
+            physical_route = convert_logical_route_to_physical_route(tuple(logical_route), src_cloud, dst_cloud,
+                                                                     include_nearby_as_locations)
+            if physical_route:
+                print(physical_route.to_tsv(), file=output if output else sys.stdout)
         except AssertionError as ex:
             logging.error(f"Ignoring failed conversion of logical route {logical_route}: {ex}")
             logging.error(traceback.format_exc())
@@ -198,6 +213,8 @@ def parse_args():
                         help='Convert the routes from logical hops to physical hops using iGDB dataset.')
     parser.add_argument('--src-cloud', required=False, help='The source cloud')
     parser.add_argument('--dst-cloud', required=False, help='The destination cloud')
+    parser.add_argument('--include-nearby-as-locations', action='store_true',
+                        help='Whether to include nearby AS locations in iGDB physical hops lookup')
     parser.add_argument('--preserve-igdb-api-cache', action='store_true',
                         help='Whether to preserve on disk the iGDB API calls')
     args = parser.parse_args()
@@ -216,6 +233,9 @@ def parse_args():
     else:
         parser.error('Both src_cloud and dst_cloud are required.')
 
+    if args.include_nearby_as_locations:
+        logging.info('Including nearby AS locations in iGDB physical hops lookup ...')
+
     return args
 
 def main():
@@ -227,6 +247,7 @@ def main():
         convert_all_logical_routes_to_physical_routes(logical_routes,
                                                       args.src_cloud,
                                                       args.dst_cloud,
+                                                      args.include_nearby_as_locations,
                                                       args.output)
     else:
         raise ValueError('No action specified')

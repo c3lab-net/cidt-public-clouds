@@ -159,7 +159,14 @@ def get_values_and_weights_by_region_pair_from_tsv(routes_distribution_tsv: io.T
         if key not in values_and_weights_by_region_pair:
             values_and_weights_by_region_pair[key] = ([], [])
         values_and_weights_by_region_pair[key][0].append(_parse_value(row[metric], metric))
-        values_and_weights_by_region_pair[key][1].append(float(row['count']))
+        # Try to read weight from file. If not found, default to 1.
+        if 'count' in row:
+            weight = float(row['count'])
+        elif 'weight' in row:
+            weight = float(row['weight'])
+        else:
+            weight = 1
+        values_and_weights_by_region_pair[key][1].append(weight)
     return values_and_weights_by_region_pair
 
 def get_weighted_average_by_region_pair(
@@ -198,6 +205,7 @@ def plot_cdf(value_by_region_pair: dict[tuple[str, str], float], metric: RouteMe
     plot_cdf_array(values, f'{label} - {aggregate_by} {metric}', include_count=True)
     plt.xlabel('Values')
     plt.ylabel('CDF')
+    plt.ylim(0, 1)
 
     # Add the label to temporary global variable. This is used to annotate the filename and title.
     global plot_labels
@@ -264,16 +272,18 @@ def get_label_from_path(path: str) -> str:
         'routes.all.',
         'routes.aws.',
         'routes.gcloud.',
+        'cloud_region_best_route.',
     ]
     RSTRIP_SUFFIXES = [
         '.by_geo.distribution.tsv',
         '.by_geo.distribution',
+        '.tsv',
     ]
     label = os.path.basename(path)
     for prefix in LSTRIP_PREFIXES:
-        label = label.lstrip(prefix)
+        label = label.removeprefix(prefix)
     for suffix in RSTRIP_SUFFIXES:
-        label = label.rstrip(suffix)
+        label = label.removesuffix(suffix)
     return label
 
 def get_label_from_cloud_region_pair(

@@ -62,6 +62,8 @@ def parse_args():
             (column, value) = key_value_pair.split(DELIMITER, maxsplit=1)
             args.columns_to_add = {}
             args.columns_to_add[column] = value
+    else:
+        args.columns_to_add = None
 
     return args
 
